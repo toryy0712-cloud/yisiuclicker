@@ -1,0 +1,2575 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>이수 클릭커</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+      user-select: none;
+      overflow-x: auto;
+    }
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-65px) scale(1.2); }
+    }
+    .floating-text {
+      position: absolute;
+      pointer-events: none;
+      animation: floatUp 0.8s ease-out forwards;
+      font-weight: 900;
+      color: #2563eb;
+      text-shadow: 0 2px 6px rgba(255,255,255,0.95);
+      z-index: 40;
+      white-space: nowrap;
+    }
+    @keyframes pulseClick {
+      0% { transform: scale(1); }
+      50% { transform: scale(0.93); }
+      100% { transform: scale(1); }
+    }
+    .click-bounce { animation: pulseClick 0.15s ease-out; }
+    @keyframes marquee {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+    .animate-marquee {
+      display: inline-block;
+      white-space: nowrap;
+      animation: marquee 18s linear infinite;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+
+  <!-- Global Notice Banner -->
+  <div id="global-notice-bar" class="hidden bg-indigo-600 text-white py-1.5 px-4 text-sm font-bold shadow-sm overflow-hidden shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="bg-white text-indigo-700 text-xs px-2 py-0.5 rounded font-black whitespace-nowrap">📢 서버 공지</span>
+      <div class="overflow-hidden flex-1">
+        <div id="global-notice-text" class="animate-marquee"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Server Multiplier Banner -->
+  <div id="server-multiplier-banner" class="hidden bg-amber-400 text-slate-950 py-1 px-4 text-center text-xs font-black tracking-wide shadow-sm shrink-0">
+    🔥 현재 전서버 이수 <span id="banner-mult-val">2</span>배 이벤트 적용 중! 🔥
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==================== 1. LOGIN & ACCOUNT REQUEST SCREEN ==================== -->
+  <div id="auth-screen" class="flex-1 flex items-center justify-center p-4 relative">
+    <div class="w-full max-w-4xl bg-white rounded-3xl shadow-xl border border-slate-200 overflow-hidden grid grid-cols-1 md:grid-cols-2">
+      <!-- Left Branding -->
+      <div class="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex flex-col justify-between">
+        <div>
+          <span class="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-black mb-4">YISIU CLICKER ARCADE</span>
+          <h1 class="text-4xl font-black tracking-tight mb-3">이수 클릭커</h1>
+          <p class="text-blue-100 text-sm leading-relaxed">
+            이수를 클릭하고 강화하며, Cursor와 할머니를 고용해 거대한 자산을 모아보세요. 실시간 주식 거래소와 행운의 도박장까지 한 화면에서 즐길 수 있습니다.
+          </p>
+        </div>
+        <div class="mt-8 space-y-2 text-xs text-blue-100 bg-white/10 p-4 rounded-2xl">
+          <div class="font-bold text-white">📌 이용 안내</div>
+          <div>• 신규 플레이어는 우측 <b>회원가입 요청</b>을 먼저 진행해주세요.</div>
+          <div>• 관리자가 실시간으로 승인하면 즉시 로그인할 수 있습니다.</div>
+          <div>• 시작 이수는 <b>0 이수</b>이며 클릭으로 채굴을 시작합니다.</div>
+        </div>
+      </div>
+
+      <!-- Right Auth Tabs -->
+      <div class="p-8 flex flex-col justify-center">
+        <div class="flex gap-2 p-1 bg-slate-100 rounded-xl mb-6">
+          <button id="tab-login-btn" onclick="switchAuthTab('login')"
+            class="flex-1 py-2 text-sm font-bold rounded-lg bg-white text-blue-600 shadow-sm transition whitespace-nowrap">
+            로그인
+          </button>
+          <button id="tab-request-btn" onclick="switchAuthTab('request')"
+            class="flex-1 py-2 text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap">
+            회원가입 요청
+          </button>
+        </div>
+
+        <div id="login-ban-alert" class="hidden mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold"></div>
+
+        <!-- Login Form -->
+        <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">닉네임</label>
+            <input type="text" id="login-nickname" required placeholder="닉네임 입력"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none text-sm font-bold" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">비밀번호</label>
+            <input type="password" id="login-password" required placeholder="비밀번호 입력"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-blue-600 outline-none text-sm font-bold" />
+          </div>
+          <button type="submit"
+            class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md transition text-sm">
+            게임 시작하기
+          </button>
+        </form>
+
+        <!-- Account Request Form -->
+        <form id="request-form" onsubmit="handleAccountRequest(event)" class="hidden space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">희망 닉네임</label>
+            <input type="text" id="req-nickname" required placeholder="사용할 닉네임 입력"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-indigo-600 outline-none text-sm font-bold" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-600 mb-1">희망 비밀번호</label>
+            <input type="password" id="req-password" required placeholder="사용할 비밀번호 입력"
+              class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-indigo-600 outline-none text-sm font-bold" />
+          </div>
+          <button type="submit"
+            class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-md transition text-sm">
+            관리자에게 회원가입 요청 보내기
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Bottom-Right Admin Auth Trigger -->
+    <button onclick="openAdminPasswordModal()"
+      class="fixed bottom-4 right-4 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl shadow-lg text-xs font-black tracking-wide transition z-30 flex items-center gap-1.5 whitespace-nowrap">
+      <span>🛡️</span>
+      <span>관리자 패널</span>
+    </button>
+  </div>
+
+  <!-- ==================== 2. MAIN 3-COLUMN LANDSCAPE LOBBY ==================== -->
+  <div id="lobby-screen" class="hidden flex-1 flex flex-col min-w-[960px]">
+    <!-- Top Header Bar -->
+    <header class="h-14 bg-white border-b border-slate-200 px-5 flex items-center justify-between shadow-sm shrink-0">
+      <div class="flex items-center gap-3">
+        <span class="text-xl font-black text-slate-900 tracking-tight whitespace-nowrap">💎 이수 클릭커</span>
+        <span id="enhance-level-pill" class="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-black whitespace-nowrap">
+          강화 0강
+        </span>
+        <span id="header-mult-pill" class="hidden px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-xs font-black whitespace-nowrap">
+          전서버 2배 이벤트 중!
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+          <span class="text-xs text-slate-500 font-bold whitespace-nowrap">보유:</span>
+          <span id="top-balance-mini" class="text-sm font-black text-blue-600 whitespace-nowrap">0 이수</span>
+        </div>
+        <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+          <span id="header-username" class="text-xs font-black text-slate-900 whitespace-nowrap">플레이어</span>
+          <span id="header-role-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 whitespace-nowrap">일반 플레이어</span>
+        </div>
+        <button onclick="handleLogout()"
+          class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-black rounded-xl shadow-sm transition whitespace-nowrap">
+          로그아웃
+        </button>
+      </div>
+    </header>
+
+    <!-- Fixed 3-Column Horizontal Grid -->
+    <main class="flex-1 grid grid-cols-12 gap-4 p-4 items-stretch">
+
+      <!-- LEFT COLUMN (4 cols): 이수 클릭! & 일일 미션 -->
+      <section class="col-span-4 flex flex-col gap-4">
+        <!-- Clicker Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col items-center justify-between relative">
+          <!-- 3 Stat Boxes -->
+          <div class="w-full grid grid-cols-3 gap-2 mb-4">
+            <div class="bg-blue-50 border border-blue-100 rounded-xl p-2.5 text-center">
+              <div class="text-[11px] font-bold text-blue-600 whitespace-nowrap">보유 이수</div>
+              <div id="header-balance" class="text-sm font-black text-slate-900 mt-0.5 truncate">0 이수</div>
+            </div>
+            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-2.5 text-center">
+              <div class="text-[11px] font-bold text-indigo-600 whitespace-nowrap">클릭당 이수</div>
+              <div id="header-click-power" class="text-sm font-black text-slate-900 mt-0.5 truncate">+1 이수</div>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 text-center">
+              <div class="text-[11px] font-bold text-emerald-600 whitespace-nowrap">초당 이수</div>
+              <div id="header-per-sec" class="text-sm font-black text-slate-900 mt-0.5 truncate">+0 /초</div>
+            </div>
+          </div>
+
+          <!-- Circular Click Button -->
+          <div id="click-area" class="relative flex items-center justify-center my-2">
+            <button id="yisiu-circle-btn" onclick="handleYisiuClick(event)"
+              class="w-44 h-44 rounded-full overflow-hidden border-4 border-indigo-500 shadow-xl relative group focus:outline-none transition-transform">
+              <img src="1000001032.jpg" alt="이수 클릭!"
+                onerror="this.src='https://placehold.co/300x300/4f46e5/ffffff?text=YISIU'"
+                class="w-full h-full object-cover" />
+              <div class="absolute inset-0 bg-slate-900/30 group-hover:bg-slate-900/20 flex flex-col items-center justify-center transition">
+                <span class="px-3.5 py-1.5 rounded-full bg-white/95 text-slate-900 font-black text-sm shadow-md whitespace-nowrap">
+                  이수 클릭!
+                </span>
+              </div>
+              <!-- Admin Lock Overlay -->
+              <div id="admin-click-lock-overlay" class="hidden absolute inset-0 bg-slate-900/85 flex flex-col items-center justify-center text-white p-3 text-center">
+                <span class="text-2xl mb-1">🚫</span>
+                <span class="text-xs font-black">관리자 클릭 불가</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="text-xs font-bold text-slate-500 mt-2 whitespace-nowrap">
+            총 누적 클릭 수: <span id="stat-total-clicks" class="text-slate-900 font-black">0</span>회
+          </div>
+        </div>
+
+        <!-- Daily Missions Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex-1 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-black text-slate-900 flex items-center gap-1.5 whitespace-nowrap">
+                <span>🎯</span> 일일 미션
+              </h3>
+              <span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100 whitespace-nowrap">
+                올클리어 보상 25만 이수
+              </span>
+            </div>
+
+            <div class="space-y-2 text-xs">
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                <div>
+                  <div class="font-bold text-slate-800">1. 100번 클릭하기</div>
+                  <div id="dm-prog-clicks" class="text-[11px] text-slate-500 font-semibold">0 / 100회</div>
+                </div>
+                <span id="dm-status-clicks" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">진행중</span>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                <div>
+                  <div class="font-bold text-slate-800">2. 10만 이수 모으기</div>
+                  <div id="dm-prog-yisiu" class="text-[11px] text-slate-500 font-semibold">0 / 10만 이수</div>
+                </div>
+                <span id="dm-status-yisiu" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">진행중</span>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                <div>
+                  <div class="font-bold text-slate-800">3. 도박 한 번 성공하기</div>
+                  <div class="text-[11px] text-slate-500 font-semibold">도박장 1회 승리</div>
+                </div>
+                <span id="dm-status-gamble" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">미완료</span>
+              </div>
+
+              <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                <div>
+                  <div class="font-bold text-slate-800">4. 주식 하나 사기</div>
+                  <div class="text-[11px] text-slate-500 font-semibold">아무 주식 1주 이상 매수</div>
+                </div>
+                <span id="dm-status-stock" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">미완료</span>
+              </div>
+            </div>
+          </div>
+
+          <button id="claim-daily-reward-btn" onclick="claimDailyMissionReward()" disabled
+            class="mt-3 w-full py-3 bg-slate-200 text-slate-500 font-black rounded-xl text-xs transition cursor-not-allowed whitespace-nowrap">
+            🎁 일일 미션 보상 25만 이수 받기
+          </button>
+        </div>
+      </section>
+
+      <!-- CENTER COLUMN (4 cols): 성장 & 송금 허브 -->
+      <section class="col-span-4 flex flex-col">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex-1 flex flex-col">
+          <!-- 3 Clean Horizontal Tabs -->
+          <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl mb-4 shrink-0">
+            <button id="subtab-shop-btn" onclick="switchMiddleTab('shop')"
+              class="py-2 px-2 text-xs font-black rounded-lg bg-white text-blue-600 shadow-sm transition whitespace-nowrap">
+              🛒 Cursor & 할머니
+            </button>
+            <button id="subtab-enhance-btn" onclick="switchMiddleTab('enhance')"
+              class="py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap">
+              ⚔️ 100강 강화
+            </button>
+            <button id="subtab-transfer-btn" onclick="switchMiddleTab('transfer')"
+              class="py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap">
+              💸 이수 주기
+            </button>
+          </div>
+
+          <!-- TAB 1: Cursor & Grandma Upgrades -->
+          <div id="middle-shop-panel" class="flex-1 flex flex-col space-y-2.5 overflow-y-auto pr-1">
+            <div class="text-xs text-slate-500 font-bold">
+              자동으로 초당 이수를 생산하는 도우미와 시설을 구매하세요!
+            </div>
+            <div id="upgrades-list" class="space-y-2"></div>
+          </div>
+
+          <!-- TAB 2: 100-Tier Enhancement (Costs 1,500x Higher) -->
+          <div id="middle-enhance-panel" class="hidden flex-1 flex flex-col justify-between">
+            <div class="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-2xl p-5 border border-indigo-100 text-center space-y-3">
+              <div class="inline-block px-3 py-1 bg-indigo-600 text-white text-xs font-black rounded-full">
+                강화 비용 1,500배 적용
+              </div>
+              <div class="text-3xl font-black text-slate-900">
+                현재 <span id="enh-current-lv" class="text-indigo-600">0</span>강
+                <span class="text-slate-400 text-xl">→</span>
+                다음 <span id="enh-next-lv" class="text-blue-600">1</span>강
+              </div>
+              <p class="text-xs text-slate-600 font-medium leading-relaxed">
+                첫 번째 강화(0강→1강)는 <b class="text-emerald-600">100% 성공</b>하며,<br/>
+                강화 성공 시마다 클릭당 이수가 <b class="text-indigo-600">2배씩</b> 증가합니다!
+              </p>
+
+              <div class="grid grid-cols-2 gap-3 pt-2">
+                <div class="bg-white p-3 rounded-xl border border-slate-200">
+                  <div class="text-[11px] font-bold text-slate-500">성공 확률</div>
+                  <div id="enh-success-rate" class="text-lg font-black text-emerald-600">100%</div>
+                </div>
+                <div class="bg-white p-3 rounded-xl border border-slate-200">
+                  <div class="text-[11px] font-bold text-slate-500">필요 강화 비용</div>
+                  <div id="enh-cost" class="text-base font-black text-rose-600">15만 이수</div>
+                </div>
+              </div>
+            </div>
+
+            <div id="enh-result-log" class="my-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-600">
+              강화 버튼을 눌러 클릭 배율을 2배로 올리세요!
+            </div>
+
+            <button id="enh-action-btn" onclick="handleEnhance()"
+              class="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black rounded-xl shadow-md transition text-sm">
+              ⚡ 지금 강화하기
+            </button>
+          </div>
+
+          <!-- TAB 3: Player-to-Player Transfer (이수 주기) -->
+          <div id="middle-transfer-panel" class="hidden flex-1 flex flex-col justify-between">
+            <div class="space-y-4">
+              <div class="p-4 rounded-2xl bg-blue-50 border border-blue-100 text-xs text-blue-800 font-medium">
+                다른 플레이어에게 보유 중인 이수를 즉시 선물할 수 있습니다. <b>1조, 50경, 500만</b> 등 한글 단위를 그대로 입력하세요!
+              </div>
+
+              <form onsubmit="handlePlayerTransfer(event)" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-bold text-slate-600 mb-1.5">받는 사람 선택</label>
+                  <select id="transfer-target-select"
+                    class="w-full px-3.5 py-3 rounded-xl border border-slate-300 bg-slate-50 text-sm font-black text-slate-800 outline-none focus:border-blue-500">
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-600 mb-1.5">보낼 이수 금액</label>
+                  <input type="text" id="transfer-amount-input" placeholder="예: 10000, 1조, 50경" required
+                    class="w-full px-3.5 py-3 rounded-xl border border-slate-300 text-sm font-bold outline-none focus:border-blue-500" />
+                </div>
+                <button type="submit"
+                  class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-black rounded-xl shadow-md transition">
+                  💸 선택한 플레이어에게 이수 주기
+                </button>
+              </form>
+            </div>
+            <div class="text-[11px] text-slate-400 text-center">송금된 이수는 즉시 상대방 계정에 반영됩니다.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN (4 cols): 실시간 주식 (3종) & 이수 도박장 -->
+      <section class="col-span-4 flex flex-col">
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex-1 flex flex-col">
+          <!-- 2 Clean Horizontal Tabs -->
+          <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-3 shrink-0">
+            <button id="righttab-stocks-btn" onclick="switchRightTab('stocks')"
+              class="py-2 px-2 text-xs font-black rounded-lg bg-white text-emerald-600 shadow-sm transition whitespace-nowrap">
+              📈 실시간 주식 (3종)
+            </button>
+            <button id="righttab-gamble-btn" onclick="switchRightTab('gamble')"
+              class="py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap">
+              🎰 이수 도박장
+            </button>
+          </div>
+
+          <!-- RIGHT TAB 1: 3 Real-Time Stocks (이수마트, 시현디아, 이시전자) -->
+          <div id="right-stocks-panel" class="flex-1 flex flex-col justify-between space-y-2.5 overflow-y-auto pr-1">
+            <!-- Stock 1: 이수마트 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이수마트</span>
+                    <span id="stock-owned-yisiumart" class="text-xs font-bold text-blue-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-yisiumart" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-yisiumart" class="font-black text-sm text-slate-900 whitespace-nowrap">1,000 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-yisiumart" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-yisiumart" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-yisiumart" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('yisiumart', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('yisiumart', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('yisiumart', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('yisiumart', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('yisiumart', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+
+            <!-- Stock 2: 시현디아 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">시현디아</span>
+                    <span id="stock-owned-sihyundia" class="text-xs font-bold text-purple-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-sihyundia" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-sihyundia" class="font-black text-sm text-slate-900 whitespace-nowrap">5,000 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-sihyundia" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-sihyundia" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-sihyundia" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('sihyundia', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('sihyundia', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('sihyundia', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('sihyundia', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('sihyundia', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+
+            <!-- Stock 3: 이시전자 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이시전자</span>
+                    <span id="stock-owned-isijeonja" class="text-xs font-bold text-emerald-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-isijeonja" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-isijeonja" class="font-black text-sm text-slate-900 whitespace-nowrap">1만 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-isijeonja" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-isijeonja" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-isijeonja" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('isijeonja', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('isijeonja', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('isijeonja', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('isijeonja', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('isijeonja', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT TAB 2: Gambling Arena (행운의 룰렛 + 슬롯머신) -->
+          <div id="right-gamble-panel" class="hidden flex-1 flex flex-col justify-between space-y-3 overflow-y-auto pr-1">
+            <!-- Mode Switcher & Odds -->
+            <div class="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <div class="flex gap-1.5">
+                <button id="gamble-mode-roulette-btn" onclick="switchGambleMode('roulette')"
+                  class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black shadow-sm transition whitespace-nowrap">
+                  🎡 행운의 룰렛
+                </button>
+                <button id="gamble-mode-slot-btn" onclick="switchGambleMode('slot')"
+                  class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 text-xs font-black transition whitespace-nowrap">
+                  🎰 슬롯머신
+                </button>
+              </div>
+              <div class="text-right whitespace-nowrap">
+                <span class="text-[10px] font-bold text-slate-500 block">설정 승률</span>
+                <span id="gamble-odds-display" class="text-sm font-black text-amber-600">50%</span>
+              </div>
+            </div>
+
+            <!-- Mode A: Spinning Roulette Canvas -->
+            <div id="gamble-roulette-view" class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-col items-center justify-center relative">
+              <div class="relative w-44 h-44 flex items-center justify-center">
+                <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[18px] border-t-rose-600 drop-shadow"></div>
+                <canvas id="roulette-canvas" width="220" height="220" class="w-44 h-44 rounded-full shadow-lg"></canvas>
+              </div>
+              <div class="text-[11px] text-slate-500 font-bold mt-2">
+                2배 · 3배 · 5배 · JACKPOT(10배) 찬스!
+              </div>
+            </div>
+
+            <!-- Mode B: 3-Reel Slot Machine -->
+            <div id="gamble-slot-view" class="hidden bg-slate-900 rounded-2xl p-4 border border-slate-800 text-center space-y-2.5">
+              <div class="text-[11px] font-black text-amber-400 tracking-wider">YISIU 3-REEL SLOTS</div>
+              <div class="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div id="slot-reel-1" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">💎</div>
+                <div id="slot-reel-2" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">🍀</div>
+                <div id="slot-reel-3" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">👑</div>
+              </div>
+              <div class="text-[11px] text-slate-400 font-bold">
+                3개 일치 시 <span class="text-amber-400">2배 ~ 7배</span> 잭팟 당첨!
+              </div>
+            </div>
+
+            <!-- Bet Input -->
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <label class="block text-xs font-bold text-slate-600">베팅 금액 (예: 1000, 1만, 100조)</label>
+              <input type="text" id="gamble-bet-input" placeholder="베팅할 이수 입력"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold outline-none focus:border-amber-500" />
+              <div class="grid grid-cols-3 gap-1.5">
+                <button type="button" onclick="setGambleBetRatio(0.25)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">25%</button>
+                <button type="button" onclick="setGambleBetRatio(0.5)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">50%</button>
+                <button type="button" onclick="setGambleBetRatio(1)" class="py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-black rounded-lg">올인</button>
+              </div>
+            </div>
+
+            <div id="gamble-result-box" class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-600">
+              룰렛 또는 슬롯을 돌려 행운을 시험해보세요!
+            </div>
+
+            <button id="gamble-spin-btn" onclick="handleGamble()"
+              class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl shadow-md transition text-sm">
+              🎡 룰렛 돌리기
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom-Right "관리자 패널" Button inside Lobby -->
+    <button id="lobby-admin-open-btn" onclick="openAdminPanelFromLobby()"
+      class="fixed bottom-4 right-4 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl shadow-xl text-xs font-black tracking-wide transition z-30 flex items-center gap-1.5 whitespace-nowrap">
+      <span>🛡️</span>
+      <span>관리자 패널</span>
+    </button>
+  </div>
+
+  <!-- ==================== 3. ADMIN PASSWORD PROMPT MODAL ==================== -->
+  <div id="admin-pass-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-sm p-6">
+      <h3 class="text-lg font-black text-slate-900 mb-1">관리자 인증</h3>
+      <p class="text-xs text-slate-500 mb-4">관리자 비밀번호를 입력하면 관리자 권한으로 로비에 입장합니다.</p>
+      <form onsubmit="verifyAdminPassword(event)" class="space-y-4">
+        <input type="password" id="admin-secret-input" required placeholder="관리자 비밀번호 입력"
+          class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-slate-900 outline-none text-sm font-bold" />
+        <div class="flex gap-2">
+          <button type="button" onclick="closeAdminPasswordModal()"
+            class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">
+            취소
+          </button>
+          <button type="submit"
+            class="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-xs">
+            확인
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 4. FULL ADMIN PANEL MODAL ==================== -->
+  <div id="admin-panel-modal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 md:p-6">
+    <div class="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[92vh] flex flex-col overflow-hidden">
+      <!-- Admin Header -->
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">🛡️</span>
+          <div>
+            <h2 class="text-lg font-black leading-none">이수 클릭커 관리자 패널</h2>
+            <span id="admin-active-role-label" class="text-xs text-amber-400 font-bold">현재 직급: 최고 관리자</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="exportDatabaseBackup()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg whitespace-nowrap">
+            💾 계정 데이터 백업
+          </button>
+          <button onclick="closeAdminPanel()" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-black rounded-xl whitespace-nowrap">
+            닫기 ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin Content Grid -->
+      <div class="p-5 overflow-y-auto grid grid-cols-1 lg:grid-cols-12 gap-5 bg-slate-50">
+
+        <!-- LEFT (5 cols): 선택 항목 (유저 관리 & 비밀번호 확인) + 이수/초당이수 제어 + 직급 임명 -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <h3 class="text-sm font-black text-slate-900 flex items-center justify-between">
+              <span>📋 선택 항목 (유저 정보 및 비밀번호 확인)</span>
+              <span id="admin-total-users-count" class="text-xs text-blue-600 font-bold">총 0명</span>
+            </h3>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">관리할 유저 선택</label>
+              <select id="admin-user-select" onchange="renderSelectedUserDetail()"
+                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm font-black text-slate-900 outline-none">
+              </select>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5 text-xs">
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">닉네임:</span>
+                <span id="sel-u-name" class="font-black text-slate-900">-</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">계정 비밀번호:</span>
+                <span id="sel-u-pass" class="font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">-</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">직급:</span>
+                <span id="sel-u-role" class="font-black text-indigo-600">-</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">보유 이수:</span>
+                <span id="sel-u-balance" class="font-black text-blue-600">0 이수</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">초당 이수 / 강화:</span>
+                <span id="sel-u-stats" class="font-bold text-slate-700">0/초 · 0강</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-500 font-bold">밴(제재) 상태:</span>
+                <span id="sel-u-ban" class="font-black text-emerald-600">정상</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Score & Per-Second Controls -->
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <h3 class="text-sm font-black text-slate-900">💰 선택 유저 이수 & 초당 이수 제어</h3>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 mb-1">숫자 입력 (예: 1000, 10조, 5해, 3자)</label>
+              <input type="text" id="admin-amount-input" placeholder="예: 10조"
+                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-bold outline-none focus:border-blue-500" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="adminModifyBalance('add')" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">
+                + 이수 지급
+              </button>
+              <button onclick="adminModifyBalance('sub')" class="py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-black rounded-xl">
+                - 이수 차감
+              </button>
+              <button id="btn-admin-set-score" onclick="adminModifyBalance('set')" class="py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl">
+                입력 숫자로 변경
+              </button>
+              <button id="btn-admin-reset-score" onclick="adminModifyBalance('reset')" class="py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-black rounded-xl">
+                0으로 초기화
+              </button>
+            </div>
+
+            <div id="admin-per-sec-box" class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+              <button onclick="adminModifyPerSec('add')" class="py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl">
+                + 초당 이수 지급
+              </button>
+              <button onclick="adminModifyPerSec('sub')" class="py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-black rounded-xl">
+                - 초당 이수 차감
+              </button>
+            </div>
+          </div>
+
+          <!-- Role Appointment -->
+          <div id="admin-role-appoint-box" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">👑 직급 임명 (최고 관리자 전용)</h3>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="adminAppointRole('SUPER_ADMIN')" class="py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black rounded-xl">최고 관리자 임명</button>
+              <button onclick="adminAppointRole('GENERAL_ADMIN')" class="py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl">일반 관리자 임명</button>
+              <button onclick="adminAppointRole('JUNIOR_ADMIN')" class="py-2 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-xl">하급 관리자 임명</button>
+              <button onclick="adminAppointRole('PLAYER')" class="py-2 bg-slate-500 hover:bg-slate-600 text-white text-xs font-black rounded-xl">일반 플레이어로 변경</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MIDDLE (4 cols): 일관밴 & 회원가입 요청 승인/생성 -->
+        <div class="lg:col-span-4 space-y-4">
+          <div id="admin-ban-section" class="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm space-y-3">
+            <h3 class="text-sm font-black text-rose-600 flex items-center gap-1.5">
+              <span>🔨</span> 일관밴 (선택 유저 제재)
+            </h3>
+            <p class="text-[11px] text-slate-500">선택된 유저에게 1시간, 10시간, 하루, 한달, 영구 밴 또는 직접 지정한 시간으로 일관밴을 적용합니다.</p>
+
+            <div class="grid grid-cols-3 gap-1.5">
+              <button onclick="applyIlgwanBanPreset(3600, '1시간')" class="py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl">1시간 밴</button>
+              <button onclick="applyIlgwanBanPreset(36000, '10시간')" class="py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl">10시간 밴</button>
+              <button onclick="applyIlgwanBanPreset(86400, '하루(24시간)')" class="py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-black rounded-xl">하루 밴</button>
+              <button onclick="applyIlgwanBanPreset(2592000, '한달(30일)')" class="py-2 bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 text-xs font-black rounded-xl">한달 밴</button>
+              <button onclick="applyIlgwanBanPreset('PERM', '영구')" class="py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl">영구 밴</button>
+              <button onclick="unbanSelectedUser()" class="py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">밴 해제</button>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100">
+              <label class="block text-xs font-bold text-slate-600 mb-1">내가 정한 시간으로 일관밴</label>
+              <div class="flex gap-1.5">
+                <input type="number" id="custom-ban-value" min="1" placeholder="숫자 입력"
+                  class="w-24 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold outline-none" />
+                <select id="custom-ban-unit" class="px-2.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-xs font-bold">
+                  <option value="60">분</option>
+                  <option value="3600" selected>시간</option>
+                  <option value="86400">일</option>
+                  <option value="2592000">달(30일)</option>
+                </select>
+                <button onclick="applyCustomIlgwanBan()"
+                  class="flex-1 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl">
+                  적용
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Registration Queue & Direct Account Creation -->
+          <div id="admin-account-queue-box" class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <h3 class="text-sm font-black text-slate-900 flex items-center justify-between">
+              <span>📩 실시간 회원가입 요청</span>
+              <span id="pending-req-badge" class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs font-black">0건</span>
+            </h3>
+            <div id="admin-pending-list" class="space-y-2 max-h-40 overflow-y-auto">
+              <div class="text-xs text-slate-400 text-center py-4">대기 중인 요청이 없습니다.</div>
+            </div>
+
+            <form onsubmit="adminDirectCreateAccount(event)" class="pt-3 border-t border-slate-100 space-y-2">
+              <div class="text-xs font-black text-slate-700">➕ 관리자 직접 계정 생성</div>
+              <div class="grid grid-cols-2 gap-2">
+                <input type="text" id="admin-new-nick" required placeholder="새 닉네임"
+                  class="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold outline-none" />
+                <input type="text" id="admin-new-pass" required placeholder="비밀번호"
+                  class="px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold outline-none" />
+              </div>
+              <button type="submit" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl">
+                계정 생성 및 영구 저장
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- RIGHT (3 cols): 전서버 배수, 주식 3배 폭등/80% 하락, 도박장 확률, 공지 -->
+        <div id="admin-server-events-box" class="lg:col-span-3 space-y-4">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🔥 전서버 이수 배수 설정</h3>
+            <p class="text-[11px] text-slate-500">현재 배수: <b id="admin-current-mult" class="text-blue-600">1배</b></p>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button onclick="setGlobalMultiplier(1)" class="py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black rounded-xl">1배(기본)</button>
+              <button onclick="setGlobalMultiplier(2)" class="py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-black rounded-xl">2배</button>
+              <button onclick="setGlobalMultiplier(3)" class="py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-black rounded-xl">3배</button>
+              <button onclick="setGlobalMultiplier(5)" class="py-2 bg-orange-100 hover:bg-orange-200 text-orange-900 text-xs font-black rounded-xl">5배</button>
+              <button onclick="setGlobalMultiplier(10)" class="py-2 bg-orange-200 hover:bg-orange-300 text-orange-950 text-xs font-black rounded-xl">10배</button>
+              <button onclick="setGlobalMultiplier(50)" class="py-2 bg-rose-100 hover:bg-rose-200 text-rose-900 text-xs font-black rounded-xl">50배</button>
+              <button onclick="setGlobalMultiplier(100)" class="col-span-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl">🚀 전서버 이수 100배 적용</button>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">📊 전서버 주식 시장 조작</h3>
+            <div class="grid grid-cols-1 gap-2">
+              <button onclick="triggerGlobalStockEvent('surge')" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">
+                📈 주식 3배 폭등!
+              </button>
+              <button onclick="triggerGlobalStockEvent('crash')" class="py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl">
+                📉 주식 80% 하락!
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🎰 이수 도박장 확률 조정</h3>
+            <div class="flex items-center justify-between text-xs font-bold">
+              <span>당첨 확률:</span>
+              <span id="admin-odds-val" class="text-amber-600 font-black">50%</span>
+            </div>
+            <input type="range" id="admin-odds-slider" min="0" max="100" value="50"
+              oninput="document.getElementById('admin-odds-val').innerText = this.value + '%'"
+              class="w-full accent-amber-500" />
+            <button onclick="saveCasinoOdds()" class="w-full py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl">
+              확률 저장 및 적용
+            </button>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">📢 전서버 관리자 공지</h3>
+            <input type="text" id="admin-notice-input" placeholder="전서버에 띄울 공지 입력"
+              class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold outline-none focus:border-indigo-500" />
+            <div class="flex gap-2">
+              <button onclick="broadcastServerNotice()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl">
+                공지 전송
+              </button>
+              <button onclick="clearServerNotice()" class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl">
+                내리기
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 5. JAVASCRIPT APPLICATION LOGIC ==================== -->
+  <script>
+    const PERSISTENT_DB_KEY = 'yisiu_clicker_persistent_db_v1';
+    const LEGACY_KEYS = ['yisiu_clicker_db_v3', 'yisiu_clicker_db_v2', 'yisiu_clicker_db_v1', 'gemini_arcade_db'];
+    const MASTER_ADMIN_PASS = 'init-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); // 임시값. 실제 관리자 비밀번호는 Supabase users(최고관리자)에 저장
+
+    const ROLES = {
+      SUPER_ADMIN: { label: '최고 관리자', badgeClass: 'bg-purple-100 text-purple-700 border border-purple-200' },
+      GENERAL_ADMIN: { label: '일반 관리자', badgeClass: 'bg-blue-100 text-blue-700 border border-blue-200' },
+      JUNIOR_ADMIN: { label: '하급 관리자', badgeClass: 'bg-teal-100 text-teal-700 border border-teal-200' },
+      PLAYER: { label: '일반 플레이어', badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200' }
+    };
+
+    const UPGRADE_CATALOG = [
+      { id: 'cursor', name: 'Cursor (커서)', icon: '🖱️', desc: '자동으로 이수를 클릭합니다', baseCost: 15, basePps: 1 },
+      { id: 'grandma', name: '할머니', icon: '👵', desc: '따뜻한 이수를 정성껏 구워냅니다', baseCost: 100, basePps: 8 },
+      { id: 'factory', name: '이수 공장', icon: '🏭', desc: '컨베이어 벨트로 이수를 대량 생산합니다', baseCost: 12000, basePps: 260 },
+      { id: 'quantum', name: '이수 양자컴퓨터', icon: '⚛️', desc: '양자 연산으로 이수를 창조합니다', baseCost: 1400000, basePps: 7800 },
+      { id: 'island', name: '이수 섬', icon: '🏝️', desc: '이수가 넘쳐나는 섬을 통째로 운영합니다', baseCost: 10000000, basePps: 100000, growth: 1.25 },
+      { id: 'boss', name: '보스 이수', icon: '👹', desc: '압도적인 보스 이수가 이수를 쏟아냅니다', baseCost: 1000000000, basePps: 5000000, growth: 1.25 },
+      { id: 'impossible', name: '불가능 이수', icon: '🌀', desc: '불가능을 가능으로 만드는 이수', baseCost: 1000000000000000, basePps: 10000000000, growth: 1.25 },
+      { id: 'infinite', name: '무한 이수', icon: '♾️', desc: '끝없이 샘솟는 무한의 이수', baseCost: 50000000000000000, basePps: 5000000000000, growth: 1.25 }
+    ];
+
+    const KOREAN_UNITS = [
+      { name: '정', value: 1e40 },
+      { name: '간', value: 1e36 },
+      { name: '구', value: 1e32 },
+      { name: '양', value: 1e28 },
+      { name: '자', value: 1e24 },
+      { name: '해', value: 1e20 },
+      { name: '경', value: 1e16 },
+      { name: '조', value: 1e12 },
+      { name: '억', value: 1e8 },
+      { name: '만', value: 1e4 }
+    ];
+
+    function formatKoreanNumber(num) {
+      if (!isFinite(num) || isNaN(num)) return '0';
+      if (num === 0) return '0';
+      const sign = num < 0 ? '-' : '';
+      let abs = Math.abs(num);
+      if (abs < 10000) return sign + Math.floor(abs).toLocaleString('ko-KR');
+
+      let parts = [];
+      for (let i = 0; i < KOREAN_UNITS.length; i++) {
+        const u = KOREAN_UNITS[i];
+        if (abs >= u.value) {
+          const cnt = Math.floor(abs / u.value);
+          if (cnt > 0) {
+            parts.push(`${cnt.toLocaleString('ko-KR')}${u.name}`);
+            abs -= cnt * u.value;
+          }
+          if (parts.length >= 2) break;
+        }
+      }
+      if (parts.length < 2 && abs >= 1) {
+        parts.push(Math.floor(abs).toLocaleString('ko-KR'));
+      }
+      return sign + parts.join(' ');
+    }
+
+    function parseKoreanNumber(input) {
+      if (typeof input === 'number') return isFinite(input) ? input : 0;
+      if (!input) return 0;
+      const cleaned = String(input).replace(/,/g, '').replace(/\s+/g, '').trim();
+      if (!cleaned) return 0;
+      if (/^[+-]?(\d+(\.\d+)?|\.\d+)(e[+-]?\d+)?$/i.test(cleaned)) {
+        const v = parseFloat(cleaned);
+        return isFinite(v) ? v : 0;
+      }
+      let total = 0;
+      let matched = false;
+      const regex = /([+-]?\d+(?:\.\d+)?)\s*(정|간|구|양|자|해|경|조|억|만)?/g;
+      let match;
+      while ((match = regex.exec(cleaned)) !== null) {
+        if (!match[0]) break;
+        const numPart = parseFloat(match[1]);
+        const unitPart = match[2];
+        if (!isNaN(numPart)) {
+          matched = true;
+          if (unitPart) {
+            const unitObj = KOREAN_UNITS.find(u => u.name === unitPart);
+            total += numPart * (unitObj ? unitObj.value : 1);
+          } else {
+            total += numPart;
+          }
+        }
+      }
+      return matched && isFinite(total) ? Math.floor(total) : 0;
+    }
+
+    function getTodayDateString() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    }
+
+    function getDefaultDailyMission() {
+      return {
+        date: getTodayDateString(),
+        clicks: 0,
+        earnedYisiu: 0,
+        gambleWon: false,
+        stockBought: false,
+        claimed: false
+      };
+    }
+
+    function getDefaultDB() {
+      return {
+        users: {
+          '최고관리자': {
+            nickname: '최고관리자',
+            password: MASTER_ADMIN_PASS,
+            role: 'SUPER_ADMIN',
+            balance: 0,
+            adminPerSec: 0,
+            enhanceLevel: 0,
+            totalClicks: 0,
+            upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+            stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+            stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+            dailyMission: getDefaultDailyMission(),
+            ban: null
+          }
+        },
+        pendingRequests: [],
+        serverSettings: {
+          casinoOdds: 50,
+          globalMultiplier: 1,
+          notice: '',
+          stocks: {
+            yisiumart: { name: '이수마트', basePrice: 1000, price: 1000, history: [950, 980, 1020, 990, 1000] },
+            sihyundia: { name: '시현디아', basePrice: 5000, price: 5000, history: [4800, 4950, 5100, 4900, 5000] },
+            isijeonja: { name: '이시전자', basePrice: 10000, price: 10000, history: [9800, 10100, 9950, 10200, 10000] }
+          }
+        }
+      };
+    }
+
+    function loadPersistentDB() { return appDB; } // Supabase 연동: 메모리 DB 반환
+
+    function ensureUserDailyMission(user) {
+      const today = getTodayDateString();
+      if (!user.dailyMission || user.dailyMission.date !== today) {
+        user.dailyMission = getDefaultDailyMission();
+      }
+      return user.dailyMission;
+    }
+
+    // ==================== SUPABASE 연동 ====================
+    const SUPABASE_URL = 'https://wfckhlhdodtidfpmjiuy.supabase.co';   // 예: https://abcdxyz.supabase.co
+    const SUPABASE_KEY = 'sb_publishable_0VRBMB0LbWzhqPNzaMoixQ_OTQBlj_L';   // anon(public) 또는 publishable 키
+    const sb = SUPABASE_URL.startsWith('https://') ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+    const CLIENT_ID = Math.random().toString(36).slice(2);
+
+    let appDB = getDefaultDB();
+    let currentUserNickname = null;
+    let dbReady = false;
+    let lastSaved = { users: {}, settings: '' };
+    let lastPending = new Set();
+
+    function normalizeUser(nick, u) {
+      const t = getDefaultDB().users['최고관리자'];
+      const m = { ...t, ...u, nickname: nick };
+      m.password = u.password || '1234';
+      m.role = u.role || 'PLAYER';
+      m.upgrades = { ...t.upgrades, ...(u.upgrades || {}) };
+      m.stocks = { ...t.stocks, ...(u.stocks || {}) };
+      m.stockAvgPrices = { ...t.stockAvgPrices, ...(u.stockAvgPrices || {}) };
+      if (!m.dailyMission || m.dailyMission.date !== getTodayDateString()) m.dailyMission = getDefaultDailyMission();
+      if (m.ban === undefined) m.ban = null;
+      return m;
+    }
+
+    function mergeSettings(raw) {
+      const b = getDefaultDB().serverSettings;
+      raw = raw || {};
+      const m = { ...b, ...raw, stocks: { ...b.stocks, ...(raw.stocks || {}) } };
+      Object.keys(b.stocks).forEach(k => { if (!m.stocks[k].basePrice) m.stocks[k].basePrice = b.stocks[k].basePrice; });
+      return m;
+    }
+
+    async function loadFromServer() {
+      const [u, p, st] = await Promise.all([
+        sb.from('users').select('nickname,data'),
+        sb.from('pending_requests').select('nickname,data'),
+        sb.from('server_settings').select('data').eq('id', 1).maybeSingle()
+      ]);
+      const err = u.error || p.error || st.error;
+      if (err) throw err;
+
+      const db = getDefaultDB();
+      db.users = {};
+      (u.data || []).forEach(r => { db.users[r.nickname] = normalizeUser(r.nickname, r.data); });
+      if (!db.users['최고관리자']) db.users['최고관리자'] = getDefaultDB().users['최고관리자'];
+      db.pendingRequests = (p.data || []).map(r => r.data);
+      db.serverSettings = mergeSettings(st.data && st.data.data);
+      appDB = db;
+
+      lastSaved.users = {};
+      (u.data || []).forEach(r => { lastSaved.users[r.nickname] = JSON.stringify(db.users[r.nickname]); });
+      lastSaved.settings = st.data ? JSON.stringify(db.serverSettings) : '';
+      lastPending = new Set(db.pendingRequests.map(r => r.nickname));
+    }
+
+    let flushTimer = null, flushAt = 0, flushing = false;
+    function saveDB(broadcast = true) {
+      if (!dbReady) return;
+      const delay = broadcast ? 300 : 3000;
+      const at = Date.now() + delay;
+      if (flushTimer && flushAt <= at) return;
+      clearTimeout(flushTimer);
+      flushAt = at;
+      flushTimer = setTimeout(() => { flushTimer = null; flushSave(); }, delay);
+    }
+
+    async function flushSave() {
+      if (!dbReady) return;
+      if (flushing) { saveDB(); return; }
+      flushing = true;
+      try {
+        // 1) 바뀐 유저만 업로드
+        const rows = [], changed = {};
+        for (const [nick, u] of Object.entries(appDB.users)) {
+          const str = JSON.stringify(u);
+          if (lastSaved.users[nick] !== str) {
+            changed[nick] = str;
+            rows.push({ nickname: nick, data: { ...u, _by: CLIENT_ID }, updated_at: new Date().toISOString() });
+          }
+        }
+        if (rows.length) {
+          const { error } = await sb.from('users').upsert(rows);
+          if (error) throw error;
+          Object.assign(lastSaved.users, changed);
+        }
+        // 2) 서버 설정
+        const sStr = JSON.stringify(appDB.serverSettings);
+        if (lastSaved.settings !== sStr) {
+          const { error } = await sb.from('server_settings').upsert({ id: 1, data: { ...appDB.serverSettings, _by: CLIENT_ID } });
+          if (error) throw error;
+          lastSaved.settings = sStr;
+        }
+        // 3) 회원가입 요청 (추가/삭제 분만)
+        const now = new Set(appDB.pendingRequests.map(r => r.nickname));
+        const removed = [...lastPending].filter(n => !now.has(n));
+        const added = appDB.pendingRequests.filter(r => !lastPending.has(r.nickname));
+        if (removed.length) {
+          const { error } = await sb.from('pending_requests').delete().in('nickname', removed);
+          if (error) throw error;
+        }
+        if (added.length) {
+          const { error } = await sb.from('pending_requests').upsert(added.map(r => ({ nickname: r.nickname, data: r })));
+          if (error) throw error;
+        }
+        lastPending = now;
+      } catch (e) {
+        console.error('Supabase 저장 오류:', e);
+        showToast('서버 저장 실패 (네트워크/설정 확인)', 'error');
+      } finally {
+        flushing = false;
+      }
+    }
+
+    function startRealtime() {
+      sb.channel('yisiu-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, pl => {
+          if (pl.eventType === 'DELETE') {
+            delete appDB.users[pl.old.nickname];
+          } else {
+            const r = pl.new;
+            if (!r || !r.data || r.data._by === CLIENT_ID) return;   // 내가 올린 건 무시
+            appDB.users[r.nickname] = normalizeUser(r.nickname, r.data);
+            lastSaved.users[r.nickname] = JSON.stringify(appDB.users[r.nickname]);
+          }
+          if (currentUserNickname) refreshAllViews();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'server_settings' }, pl => {
+          const d = pl.new && pl.new.data;
+          if (!d || d._by === CLIENT_ID) return;
+          appDB.serverSettings = mergeSettings(d);
+          lastSaved.settings = JSON.stringify(appDB.serverSettings);
+          if (currentUserNickname) refreshAllViews();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_requests' }, pl => {
+          if (pl.eventType === 'DELETE') {
+            const n = pl.old.nickname;
+            appDB.pendingRequests = appDB.pendingRequests.filter(x => x.nickname !== n);
+            lastPending.delete(n);
+          } else {
+            const d = pl.new.data;
+            if (!appDB.pendingRequests.some(x => x.nickname === d.nickname)) appDB.pendingRequests.push(d);
+            lastPending.add(d.nickname);
+          }
+          if (currentUserNickname) refreshAllViews();
+        })
+        .subscribe();
+    }
+
+    (async function initSupabase() {
+      if (!sb) {
+        alert('코드 상단의 SUPABASE_URL / SUPABASE_KEY 를 본인 프로젝트 값으로 바꿔주세요.');
+        return;
+      }
+      try {
+        await loadFromServer();
+        startRealtime();
+        dbReady = true;
+        flushSave();   // 서버가 비어 있으면 기본 관리자/설정을 업로드
+      } catch (e) {
+        console.error(e);
+        showToast('Supabase 연결 실패: 키/테이블/RLS 설정을 확인하세요.', 'error');
+      }
+    })();
+
+    document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      const colors = {
+        info: 'bg-slate-900 text-white',
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        warning: 'bg-amber-500 text-slate-950'
+      };
+      el.className = `${colors[type] || colors.info} px-4 py-2.5 rounded-2xl shadow-xl text-xs font-black tracking-wide transition-all duration-300 whitespace-nowrap`;
+      el.innerText = msg;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(-10px)';
+        setTimeout(() => el.remove(), 300);
+      }, 2400);
+    }
+
+    // ==================== AUTHENTICATION & REGISTRATION ====================
+    function switchAuthTab(tab) {
+      const loginForm = document.getElementById('login-form');
+      const reqForm = document.getElementById('request-form');
+      const loginBtn = document.getElementById('tab-login-btn');
+      const reqBtn = document.getElementById('tab-request-btn');
+      document.getElementById('login-ban-alert').classList.add('hidden');
+
+      if (tab === 'login') {
+        loginForm.classList.remove('hidden');
+        reqForm.classList.add('hidden');
+        loginBtn.className = 'flex-1 py-2 text-sm font-bold rounded-lg bg-white text-blue-600 shadow-sm transition whitespace-nowrap';
+        reqBtn.className = 'flex-1 py-2 text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+      } else {
+        loginForm.classList.add('hidden');
+        reqForm.classList.remove('hidden');
+        reqBtn.className = 'flex-1 py-2 text-sm font-bold rounded-lg bg-white text-indigo-600 shadow-sm transition whitespace-nowrap';
+        loginBtn.className = 'flex-1 py-2 text-sm font-bold rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+      }
+    }
+
+    function formatDurationKorean(totalSec) {
+      if (totalSec <= 0) return '0초';
+      const d = Math.floor(totalSec / 86400);
+      const h = Math.floor((totalSec % 86400) / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      const s = totalSec % 60;
+      let out = [];
+      if (d > 0) out.push(`${d}일`);
+      if (h > 0) out.push(`${h}시간`);
+      if (m > 0) out.push(`${m}분`);
+      if (s > 0 && d === 0) out.push(`${s}초`);
+      return out.join(' ');
+    }
+
+    function checkUserBanStatus(user) {
+      if (!user || !user.ban) return null;
+      if (user.ban.type === 'PERM') {
+        return '영구 밴 처리된 계정입니다. 관리자에게 문의하세요.';
+      }
+      if (user.ban.type === 'TIMED') {
+        const now = Date.now();
+        if (now < user.ban.until) {
+          const remainSec = Math.ceil((user.ban.until - now) / 1000);
+          return `일관밴 적용 중입니다. 남은 시간: ${formatDurationKorean(remainSec)}`;
+        } else {
+          user.ban = null;
+          saveDB();
+          return null;
+        }
+      }
+      return null;
+    }
+
+    function handleLogin(e) {
+      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
+      e.preventDefault();
+      appDB = loadPersistentDB();
+      const nick = document.getElementById('login-nickname').value.trim();
+      const pass = document.getElementById('login-password').value.trim();
+      const banAlert = document.getElementById('login-ban-alert');
+      banAlert.classList.add('hidden');
+
+      const user = appDB.users[nick];
+      if (!user) {
+        const isPending = appDB.pendingRequests.some(r => r.nickname === nick);
+        if (isPending) {
+          showToast('아직 관리자가 회원가입 요청을 승인하지 않았습니다.', 'warning');
+        } else {
+          showToast('존재하지 않는 닉네임입니다. 먼저 회원가입 요청을 해주세요.', 'error');
+        }
+        return;
+      }
+
+      if (user.password !== pass) {
+        showToast('비밀번호가 일치하지 않습니다.', 'error');
+        return;
+      }
+
+      const banMsg = checkUserBanStatus(user);
+      if (banMsg) {
+        banAlert.innerText = `🚫 ${banMsg}`;
+        banAlert.classList.remove('hidden');
+        return;
+      }
+
+      enterLobby(nick);
+    }
+
+    function handleAccountRequest(e) {
+      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
+      e.preventDefault();
+      appDB = loadPersistentDB();
+      const nick = document.getElementById('req-nickname').value.trim();
+      const pass = document.getElementById('req-password').value.trim();
+
+      if (!nick || !pass) return;
+      if (appDB.users[nick]) {
+        showToast('이미 등록된 닉네임입니다.', 'error');
+        return;
+      }
+      if (appDB.pendingRequests.some(r => r.nickname === nick)) {
+        showToast('이미 승인 대기 중인 닉네임입니다.', 'warning');
+        return;
+      }
+
+      appDB.pendingRequests.push({
+        nickname: nick,
+        password: pass,
+        requestedAt: new Date().toLocaleTimeString('ko-KR')
+      });
+      saveDB();
+
+      document.getElementById('req-nickname').value = '';
+      document.getElementById('req-password').value = '';
+      showToast('관리자 패널로 회원가입 요청이 실시간 전송되었습니다!', 'success');
+      switchAuthTab('login');
+    }
+
+    function openAdminPasswordModal() {
+      document.getElementById('admin-secret-input').value = '';
+      document.getElementById('admin-pass-modal').classList.remove('hidden');
+      setTimeout(() => document.getElementById('admin-secret-input').focus(), 50);
+    }
+
+    function closeAdminPasswordModal() {
+      document.getElementById('admin-pass-modal').classList.add('hidden');
+    }
+
+    function verifyAdminPassword(e) {
+      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
+      e.preventDefault();
+      const inputPass = document.getElementById('admin-secret-input').value.trim();
+      const adminRow = appDB.users['최고관리자'];
+      if (adminRow && adminRow.password && inputPass === adminRow.password) {
+        closeAdminPasswordModal();
+        if (!appDB.users['최고관리자']) {
+          appDB.users['최고관리자'] = getDefaultDB().users['최고관리자'];
+          saveDB();
+        }
+        enterLobby('최고관리자');
+        showToast('관리자 인증 완료! 우측 하단 [관리자 패널]을 열어주세요.', 'success');
+      } else {
+        showToast('관리자 비밀번호가 올바르지 않습니다.', 'error');
+      }
+    }
+
+    function enterLobby(nickname) {
+      currentUserNickname = nickname;
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('lobby-screen').classList.remove('hidden');
+      drawRouletteWheel(rouletteCurrentDeg);
+      refreshAllViews();
+    }
+
+    function handleLogout() {
+      currentUserNickname = null;
+      closeAdminPanel();
+      document.getElementById('lobby-screen').classList.add('hidden');
+      document.getElementById('auth-screen').classList.remove('hidden');
+      document.getElementById('login-password').value = '';
+      showToast('로그아웃되었습니다.', 'info');
+    }
+
+    // ==================== GAMEPLAY CALCULATIONS ====================
+    function getClickPower(user) {
+      const base = Math.pow(2, user.enhanceLevel || 0);
+      const mult = appDB.serverSettings.globalMultiplier || 1;
+      return base * mult;
+    }
+
+    function getPerSecondIncome(user) {
+      let upgradePps = 0;
+      UPGRADE_CATALOG.forEach(item => {
+        const count = (user.upgrades && user.upgrades[item.id]) || 0;
+        upgradePps += count * item.basePps;
+      });
+      const adminPps = user.adminPerSec || 0;
+      const mult = appDB.serverSettings.globalMultiplier || 1;
+      const positivePart = Math.max(0, upgradePps + adminPps) * mult;
+      const negativePart = (upgradePps + adminPps) < 0 ? (upgradePps + adminPps) : 0;
+      return positivePart + negativePart;
+    }
+
+    function getEnhanceCost(currentLevel) {
+      return Math.floor(150000 * Math.pow(2.4, currentLevel));
+    }
+
+    function getEnhanceSuccessRate(currentLevel) {
+      if (currentLevel === 0) return 100;
+      return Math.max(5, Math.round(92 - currentLevel * 0.85));
+    }
+
+    function handleYisiuClick(event) {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+
+      if (user.role !== 'PLAYER') {
+        showToast('관리자 계정은 이수 클릭 버튼을 누를 수 없습니다.', 'error');
+        return;
+      }
+
+      const gain = getClickPower(user);
+      user.balance += gain;
+      user.totalClicks = (user.totalClicks || 0) + 1;
+
+      const dm = ensureUserDailyMission(user);
+      dm.clicks += 1;
+      dm.earnedYisiu += gain;
+
+      saveDB();
+
+      const btn = document.getElementById('yisiu-circle-btn');
+      btn.classList.remove('click-bounce');
+      void btn.offsetWidth;
+      btn.classList.add('click-bounce');
+
+      const area = document.getElementById('click-area');
+      const rect = area.getBoundingClientRect();
+      const floater = document.createElement('div');
+      floater.className = 'floating-text text-lg';
+      floater.innerText = `+${formatKoreanNumber(gain)} 이수`;
+      const x = (event.clientX - rect.left) - 25 + (Math.random() * 24 - 12);
+      const y = (event.clientY - rect.top) - 20;
+      floater.style.left = `${x}px`;
+      floater.style.top = `${y}px`;
+      area.appendChild(floater);
+      setTimeout(() => floater.remove(), 800);
+
+      updateHeaderAndStats();
+      renderUpgradeShop();
+      renderDailyMissions();
+    }
+
+    // ==================== DAILY MISSIONS ====================
+    function renderDailyMissions() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const dm = ensureUserDailyMission(user);
+
+      const cDone = dm.clicks >= 100;
+      document.getElementById('dm-prog-clicks').innerText = `${Math.min(100, dm.clicks)} / 100회`;
+      const cBadge = document.getElementById('dm-status-clicks');
+      cBadge.innerText = cDone ? '완료 ✔' : '진행중';
+      cBadge.className = cDone
+        ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
+        : 'px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap';
+
+      const currentProgressYisiu = Math.max(user.balance, dm.earnedYisiu);
+      const iDone = currentProgressYisiu >= 100000;
+      document.getElementById('dm-prog-yisiu').innerText = `${formatKoreanNumber(Math.min(100000, currentProgressYisiu))} / 10만 이수`;
+      const iBadge = document.getElementById('dm-status-yisiu');
+      iBadge.innerText = iDone ? '완료 ✔' : '진행중';
+      iBadge.className = iDone
+        ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
+        : 'px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap';
+
+      const gDone = !!dm.gambleWon;
+      const gBadge = document.getElementById('dm-status-gamble');
+      gBadge.innerText = gDone ? '완료 ✔' : '미완료';
+      gBadge.className = gDone
+        ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
+        : 'px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap';
+
+      const sDone = !!dm.stockBought;
+      const sBadge = document.getElementById('dm-status-stock');
+      sBadge.innerText = sDone ? '완료 ✔' : '미완료';
+      sBadge.className = sDone
+        ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
+        : 'px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap';
+
+      const allComplete = cDone && iDone && gDone && sDone;
+      const claimBtn = document.getElementById('claim-daily-reward-btn');
+
+      if (dm.claimed) {
+        claimBtn.disabled = true;
+        claimBtn.innerText = '✅ 일일 미션 보상(25만 이수) 수령 완료';
+        claimBtn.className = 'mt-3 w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 font-black rounded-xl text-xs cursor-default whitespace-nowrap';
+      } else if (allComplete) {
+        claimBtn.disabled = false;
+        claimBtn.innerText = '🎁 일일 미션 보상 25만 이수 받기';
+        claimBtn.className = 'mt-3 w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs shadow-md transition whitespace-nowrap';
+      } else {
+        claimBtn.disabled = true;
+        claimBtn.innerText = '🎁 일일 미션 보상 25만 이수 받기';
+        claimBtn.className = 'mt-3 w-full py-3 bg-slate-200 text-slate-500 font-black rounded-xl text-xs transition cursor-not-allowed whitespace-nowrap';
+      }
+    }
+
+    function claimDailyMissionReward() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const dm = ensureUserDailyMission(user);
+
+      if (dm.claimed) return;
+      const allComplete = dm.clicks >= 100 && Math.max(user.balance, dm.earnedYisiu) >= 100000 && dm.gambleWon && dm.stockBought;
+      if (!allComplete) {
+        showToast('4가지 일일 미션을 모두 완료해야 합니다.', 'error');
+        return;
+      }
+
+      dm.claimed = true;
+      user.balance += 250000;
+      saveDB();
+      showToast('🎉 일일 미션 보상 25만 이수를 획득했습니다!', 'success');
+      refreshAllViews();
+    }
+
+    // ==================== UPGRADE SHOP & 100-TIER ENHANCEMENT ====================
+    function getUpgradeCost(item, ownedCount) {
+      return Math.floor(item.baseCost * Math.pow(item.growth || 1.15, ownedCount));
+    }
+
+    function renderUpgradeShop() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      const list = document.getElementById('upgrades-list');
+      list.innerHTML = '';
+
+      UPGRADE_CATALOG.forEach(item => {
+        const owned = (user.upgrades && user.upgrades[item.id]) || 0;
+        const cost = getUpgradeCost(item, owned);
+        const canAfford = user.balance >= cost;
+
+        const row = document.createElement('div');
+        row.className = 'p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-2';
+        row.innerHTML = `
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-xl shrink-0">${item.icon}</div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="font-black text-xs text-slate-900 truncate">${item.name}</span>
+                <span class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-black whitespace-nowrap">${owned}개</span>
+              </div>
+              <div class="text-[11px] text-slate-500 truncate">${item.desc} (+${formatKoreanNumber(item.basePps)}/초)</div>
+            </div>
+          </div>
+          <button onclick="buyUpgrade('${item.id}')" ${canAfford ? '' : 'disabled'}
+            class="px-3 py-2 rounded-xl text-xs font-black shrink-0 whitespace-nowrap transition ${
+              canAfford
+                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            }">
+            ${formatKoreanNumber(cost)} 이수
+          </button>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function buyUpgrade(upgradeId) {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      const item = UPGRADE_CATALOG.find(u => u.id === upgradeId);
+      if (!item) return;
+
+      const owned = (user.upgrades && user.upgrades[upgradeId]) || 0;
+      const cost = getUpgradeCost(item, owned);
+      if (user.balance < cost) {
+        showToast('보유 이수가 부족합니다.', 'error');
+        return;
+      }
+
+      user.balance -= cost;
+      user.upgrades[upgradeId] = owned + 1;
+      saveDB();
+      showToast(`${item.name} 구매 완료!`, 'success');
+      refreshAllViews();
+    }
+
+    function renderEnhancementPanel() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      const lv = user.enhanceLevel || 0;
+
+      document.getElementById('enh-current-lv').innerText = lv;
+      const btn = document.getElementById('enh-action-btn');
+
+      if (lv >= 100) {
+        document.getElementById('enh-next-lv').innerText = 'MAX';
+        document.getElementById('enh-success-rate').innerText = '-';
+        document.getElementById('enh-cost').innerText = '최고 레벨 달성';
+        btn.disabled = true;
+        btn.innerText = '👑 최대 100강 달성 완료';
+        btn.className = 'w-full py-4 bg-slate-300 text-slate-600 font-black rounded-xl text-sm cursor-not-allowed';
+      } else {
+        document.getElementById('enh-next-lv').innerText = lv + 1;
+        document.getElementById('enh-success-rate').innerText = `${getEnhanceSuccessRate(lv)}%`;
+        document.getElementById('enh-cost').innerText = `${formatKoreanNumber(getEnhanceCost(lv))} 이수`;
+        btn.disabled = false;
+        btn.innerText = `⚡ ${lv + 1}강 강화하기 (${formatKoreanNumber(getEnhanceCost(lv))} 이수)`;
+        btn.className = 'w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-black rounded-xl shadow-md transition text-sm';
+      }
+    }
+
+    function handleEnhance() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      const lv = user.enhanceLevel || 0;
+      if (lv >= 100) return;
+
+      const cost = getEnhanceCost(lv);
+      if (user.balance < cost) {
+        showToast('강화에 필요한 이수가 부족합니다.', 'error');
+        return;
+      }
+
+      user.balance -= cost;
+      const rate = getEnhanceSuccessRate(lv);
+      const success = (Math.random() * 100) < rate;
+      const logEl = document.getElementById('enh-result-log');
+
+      if (success) {
+        user.enhanceLevel = lv + 1;
+        logEl.className = 'my-3 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs font-black text-emerald-700';
+        logEl.innerText = `🎉 강화 성공! [${user.enhanceLevel}강] 달성! 클릭당 획득량이 2배 증가했습니다!`;
+        showToast(`강화 성공! ${user.enhanceLevel}강 달성!`, 'success');
+      } else {
+        logEl.className = 'my-3 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-center text-xs font-black text-rose-700';
+        logEl.innerText = `💥 강화 실패... (${lv}강 유지)`;
+        showToast('강화에 실패했습니다.', 'error');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    // ==================== PLAYER TRANSFER (이수 주기) ====================
+    function renderTransferTargets() {
+      if (!currentUserNickname) return;
+      const select = document.getElementById('transfer-target-select');
+      const prev = select.value;
+      select.innerHTML = '';
+
+      const others = Object.keys(appDB.users).filter(n => n !== currentUserNickname);
+      if (others.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.innerText = '송금 가능한 다른 플레이어가 없습니다';
+        select.appendChild(opt);
+        return;
+      }
+
+      others.forEach(nick => {
+        const opt = document.createElement('option');
+        opt.value = nick;
+        opt.innerText = `${nick} (${ROLES[appDB.users[nick].role]?.label || '플레이어'})`;
+        select.appendChild(opt);
+      });
+      if (prev && others.includes(prev)) select.value = prev;
+    }
+
+    function handlePlayerTransfer(e) {
+      e.preventDefault();
+      if (!currentUserNickname) return;
+      const sender = appDB.users[currentUserNickname];
+      const targetNick = document.getElementById('transfer-target-select').value;
+      const target = appDB.users[targetNick];
+
+      if (!target) {
+        showToast('받는 사람을 선택하세요.', 'error');
+        return;
+      }
+
+      const amount = parseKoreanNumber(document.getElementById('transfer-amount-input').value);
+      if (amount <= 0) {
+        showToast('올바른 이수 금액을 입력하세요 (예: 1조, 50경).', 'error');
+        return;
+      }
+      if (sender.balance < amount) {
+        showToast('보유 이수가 부족합니다.', 'error');
+        return;
+      }
+
+      sender.balance -= amount;
+      target.balance += amount;
+      saveDB();
+
+      document.getElementById('transfer-amount-input').value = '';
+      showToast(`${targetNick} 님에게 ${formatKoreanNumber(amount)} 이수를 보냈습니다!`, 'success');
+      refreshAllViews();
+    }
+
+    // ==================== CUSTOM HTML5 CANVAS STOCK CHARTS (3 STOCKS) ====================
+    function drawStockCanvas(stockKey, strokeColor, fillColor) {
+      const canvas = document.getElementById(`canvas-stock-${stockKey}`);
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      const w = rect.width;
+      const h = rect.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const st = appDB.serverSettings.stocks[stockKey];
+      const data = st.history && st.history.length > 0 ? st.history : [st.price];
+      const minVal = Math.min(...data);
+      const maxVal = Math.max(...data);
+      const range = maxVal - minVal || 1;
+      const padX = 6;
+      const padY = 8;
+
+      const points = data.map((val, idx) => {
+        const x = padX + (idx / Math.max(1, data.length - 1)) * (w - padX * 2);
+        const y = h - padY - ((val - minVal) / range) * (h - padY * 2);
+        return { x, y };
+      });
+
+      // Area fill
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, h);
+      points.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.lineTo(points[points.length - 1].x, h);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+
+      // Line stroke
+      ctx.beginPath();
+      points.forEach((p, idx) => {
+        if (idx === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Latest point dot
+      const last = points[points.length - 1];
+      ctx.beginPath();
+      ctx.arc(last.x, last.y, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = strokeColor;
+      ctx.fill();
+    }
+
+    function updateStocksUI() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user.stockAvgPrices) {
+        user.stockAvgPrices = { yisiumart: 0, sihyundia: 0, isijeonja: 0 };
+      }
+
+      const styles = {
+        yisiumart: { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)' },
+        sihyundia: { stroke: '#7c3aed', fill: 'rgba(124, 58, 237, 0.12)' },
+        isijeonja: { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.12)' }
+      };
+
+      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+        const st = appDB.serverSettings.stocks[k];
+        const owned = (user.stocks && user.stocks[k]) || 0;
+        const avgPrice = user.stockAvgPrices[k] || 0;
+        const prev = st.history.length >= 2 ? st.history[st.history.length - 2] : st.price;
+        const diffPct = prev > 0 ? (((st.price - prev) / prev) * 100) : 0;
+        const basePrice = st.basePrice || st.price;
+        const baseDiffPct = basePrice > 0 ? (((st.price - basePrice) / basePrice) * 100) : 0;
+
+        document.getElementById(`stock-owned-${k}`).innerText = `보유: ${owned.toLocaleString()}주`;
+        document.getElementById(`stock-price-${k}`).innerText = `${formatKoreanNumber(st.price)} 이수`;
+
+        const diffEl = document.getElementById(`stock-diff-${k}`);
+        if (diffPct > 0.005) {
+          diffEl.innerText = `▲ +${diffPct.toFixed(2)}% 상승`;
+          diffEl.className = 'px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-black whitespace-nowrap';
+        } else if (diffPct < -0.005) {
+          diffEl.innerText = `▼ ${diffPct.toFixed(2)}% 하락`;
+          diffEl.className = 'px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 text-[10px] font-black whitespace-nowrap';
+        } else {
+          diffEl.innerText = '0.00% 보합';
+          diffEl.className = 'px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-[10px] font-black whitespace-nowrap';
+        }
+
+        const baseDiffEl = document.getElementById(`stock-base-diff-${k}`);
+        const bSign = baseDiffPct >= 0 ? '+' : '';
+        baseDiffEl.innerText = `(기준 ${bSign}${baseDiffPct.toFixed(1)}%)`;
+        baseDiffEl.className = `text-[10px] font-bold whitespace-nowrap ${baseDiffPct > 0 ? 'text-rose-500' : baseDiffPct < 0 ? 'text-blue-500' : 'text-slate-500'}`;
+
+        const roiEl = document.getElementById(`stock-roi-${k}`);
+        if (owned > 0 && avgPrice > 0) {
+          const roiPct = ((st.price - avgPrice) / avgPrice) * 100;
+          const rSign = roiPct >= 0 ? '+' : '';
+          roiEl.innerText = `평단가: ${formatKoreanNumber(avgPrice)} (${rSign}${roiPct.toFixed(2)}%)`;
+          roiEl.className = `text-[11px] font-bold ${roiPct > 0 ? 'text-rose-600' : roiPct < 0 ? 'text-blue-600' : 'text-slate-500'}`;
+        } else {
+          roiEl.innerText = '평단가: - (미보유)';
+          roiEl.className = 'text-[11px] font-bold text-slate-400';
+        }
+
+        drawStockCanvas(k, styles[k].stroke, styles[k].fill);
+      });
+    }
+
+    function tradeStock(stockKey, action, qty) {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user.stockAvgPrices) {
+        user.stockAvgPrices = { yisiumart: 0, sihyundia: 0, isijeonja: 0 };
+      }
+      const st = appDB.serverSettings.stocks[stockKey];
+      const owned = user.stocks[stockKey] || 0;
+      const prevAvg = user.stockAvgPrices[stockKey] || 0;
+
+      if (action === 'buy') {
+        if (user.balance < st.price * qty) {
+          showToast('보유 이수가 부족합니다.', 'error');
+          return;
+        }
+        user.balance -= st.price * qty;
+        user.stockAvgPrices[stockKey] = Math.round(((owned * prevAvg) + (qty * st.price)) / (owned + qty));
+        user.stocks[stockKey] = owned + qty;
+        ensureUserDailyMission(user).stockBought = true;
+        showToast(`${st.name} ${qty}주 매수 완료!`, 'success');
+      } else if (action === 'buyAll') {
+        const maxQty = Math.floor(user.balance / st.price);
+        if (maxQty <= 0) {
+          showToast('1주도 매수할 수 없습니다.', 'error');
+          return;
+        }
+        user.balance -= st.price * maxQty;
+        user.stockAvgPrices[stockKey] = Math.round(((owned * prevAvg) + (maxQty * st.price)) / (owned + maxQty));
+        user.stocks[stockKey] = owned + maxQty;
+        ensureUserDailyMission(user).stockBought = true;
+        showToast(`${st.name} ${maxQty.toLocaleString()}주 전량 매수!`, 'success');
+      } else if (action === 'sell') {
+        if (owned < qty) {
+          showToast('보유 주식이 부족합니다.', 'error');
+          return;
+        }
+        user.stocks[stockKey] = owned - qty;
+        if (user.stocks[stockKey] === 0) user.stockAvgPrices[stockKey] = 0;
+        user.balance += st.price * qty;
+        showToast(`${st.name} ${qty}주 매도 완료!`, 'info');
+      } else if (action === 'sellAll') {
+        if (owned <= 0) {
+          showToast('매도할 주식이 없습니다.', 'error');
+          return;
+        }
+        const gain = st.price * owned;
+        user.stocks[stockKey] = 0;
+        user.stockAvgPrices[stockKey] = 0;
+        user.balance += gain;
+        showToast(`${st.name} 전량 매도 (+${formatKoreanNumber(gain)} 이수)!`, 'success');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    // ==================== CASINO ROULETTE & SLOTS ====================
+    let currentGambleMode = 'roulette';
+    let isGamblingSpinning = false;
+    let rouletteCurrentDeg = 0;
+
+    const ROULETTE_SECTORS = [
+      { label: '2배', color: '#10b981' },
+      { label: '꽝', color: '#ef4444' },
+      { label: '3배', color: '#3b82f6' },
+      { label: '꽝', color: '#64748b' },
+      { label: '5배', color: '#f59e0b' },
+      { label: '10배', color: '#ec4899' }
+    ];
+
+    function drawRouletteWheel(rotationDeg) {
+      const canvas = document.getElementById('roulette-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const radius = cx - 6;
+      const sliceRad = (Math.PI * 2) / ROULETTE_SECTORS.length;
+      const rotRad = (rotationDeg * Math.PI) / 180;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ROULETTE_SECTORS.forEach((sec, i) => {
+        const startAngle = rotRad + i * sliceRad - Math.PI / 2;
+        const endAngle = startAngle + sliceRad;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = sec.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(startAngle + sliceRad / 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '900 15px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(sec.label, radius - 18, 0);
+        ctx.restore();
+      });
+
+      // Outer border
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+
+      // Center hub
+      ctx.beginPath();
+      ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 12px "Noto Sans KR", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('이수', cx, cy);
+    }
+
+    function switchGambleMode(mode) {
+      if (isGamblingSpinning) return;
+      currentGambleMode = mode;
+      const rView = document.getElementById('gamble-roulette-view');
+      const sView = document.getElementById('gamble-slot-view');
+      const rBtn = document.getElementById('gamble-mode-roulette-btn');
+      const sBtn = document.getElementById('gamble-mode-slot-btn');
+      const spinBtn = document.getElementById('gamble-spin-btn');
+
+      if (mode === 'roulette') {
+        rView.classList.remove('hidden');
+        sView.classList.add('hidden');
+        rBtn.className = 'px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black shadow-sm transition whitespace-nowrap';
+        sBtn.className = 'px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 text-xs font-black transition whitespace-nowrap';
+        spinBtn.innerText = '🎡 룰렛 돌리기';
+        drawRouletteWheel(rouletteCurrentDeg);
+      } else {
+        rView.classList.add('hidden');
+        sView.classList.remove('hidden');
+        sBtn.className = 'px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black shadow-sm transition whitespace-nowrap';
+        rBtn.className = 'px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 text-xs font-black transition whitespace-nowrap';
+        spinBtn.innerText = '🎰 슬롯머신 돌리기';
+      }
+    }
+
+    function setGambleBetRatio(ratio) {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      const val = Math.floor(user.balance * ratio);
+      document.getElementById('gamble-bet-input').value = formatKoreanNumber(val);
+    }
+
+    function handleGamble() {
+      if (!currentUserNickname || isGamblingSpinning) return;
+      const user = appDB.users[currentUserNickname];
+      const bet = parseKoreanNumber(document.getElementById('gamble-bet-input').value);
+
+      if (bet <= 0) {
+        showToast('베팅할 이수를 입력하세요.', 'error');
+        return;
+      }
+      if (user.balance < bet) {
+        showToast('보유 이수가 부족합니다.', 'error');
+        return;
+      }
+
+      user.balance -= bet;
+      saveDB();
+      updateHeaderAndStats();
+
+      isGamblingSpinning = true;
+      const spinBtn = document.getElementById('gamble-spin-btn');
+      spinBtn.disabled = true;
+      spinBtn.classList.add('opacity-60', 'cursor-not-allowed');
+
+      const odds = appDB.serverSettings.casinoOdds ?? 50;
+      const win = (Math.random() * 100) < odds;
+      const resBox = document.getElementById('gamble-result-box');
+
+      if (currentGambleMode === 'roulette') {
+        let targetSectorIdx = 1;
+        let multiplier = 0;
+        let label = '꽝';
+
+        if (win) {
+          const r = Math.random();
+          if (r < 0.55) { targetSectorIdx = 0; multiplier = 2; label = '2배 당첨'; }
+          else if (r < 0.82) { targetSectorIdx = 2; multiplier = 3; label = '3배 당첨'; }
+          else if (r < 0.95) { targetSectorIdx = 4; multiplier = 5; label = '5배 대박'; }
+          else { targetSectorIdx = 5; multiplier = 10; label = 'JACKPOT 10배'; }
+        } else {
+          targetSectorIdx = Math.random() < 0.5 ? 1 : 3;
+        }
+
+        const sectorCenterDeg = targetSectorIdx * 60 + 30;
+        const desiredStopDeg = (360 - sectorCenterDeg + 360) % 360;
+        const startDeg = rouletteCurrentDeg;
+        const deltaDeg = ((desiredStopDeg - (startDeg % 360) + 360) % 360) + 360 * 5;
+        const endDeg = startDeg + deltaDeg;
+        const duration = 2600;
+        const startTime = performance.now();
+
+        resBox.className = 'p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs font-black text-amber-700';
+        resBox.innerText = '🎡 룰렛이 회전하고 있습니다...';
+
+        function animateWheel(now) {
+          const elapsed = now - startTime;
+          const t = Math.min(1, elapsed / duration);
+          const easeOut = 1 - Math.pow(1 - t, 3);
+          rouletteCurrentDeg = startDeg + deltaDeg * easeOut;
+          drawRouletteWheel(rouletteCurrentDeg);
+
+          if (t < 1) {
+            requestAnimationFrame(animateWheel);
+          } else {
+            rouletteCurrentDeg = endDeg;
+            drawRouletteWheel(rouletteCurrentDeg);
+            finalizeGambleOutcome(user, bet, win, multiplier, label);
+          }
+        }
+        requestAnimationFrame(animateWheel);
+      } else {
+        const symbols = ['🍒', '🍋', '🍀', '💎', '👑'];
+        const r1 = document.getElementById('slot-reel-1');
+        const r2 = document.getElementById('slot-reel-2');
+        const r3 = document.getElementById('slot-reel-3');
+
+        resBox.className = 'p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center text-xs font-black text-amber-700';
+        resBox.innerText = '🎰 슬롯이 회전하고 있습니다...';
+
+        const spinInterval = setInterval(() => {
+          r1.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+          r2.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+          r3.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+        }, 80);
+
+        setTimeout(() => {
+          clearInterval(spinInterval);
+          let multiplier = 0;
+          let label = '꽝';
+
+          if (win) {
+            const tierRoll = Math.random();
+            let chosenSym = '🍒';
+            if (tierRoll < 0.55) { chosenSym = '🍒'; multiplier = 2; label = '체리 2배 당첨'; }
+            else if (tierRoll < 0.85) { chosenSym = '💎'; multiplier = 3; label = '다이아 3배 당첨'; }
+            else { chosenSym = '👑'; multiplier = 7; label = '왕관 잭팟 7배'; }
+            r1.innerText = chosenSym;
+            r2.innerText = chosenSym;
+            r3.innerText = chosenSym;
+          } else {
+            r1.innerText = '🍋';
+            r2.innerText = '💎';
+            r3.innerText = '🍒';
+          }
+          finalizeGambleOutcome(user, bet, win, multiplier, label);
+        }, 1500);
+      }
+    }
+
+    function finalizeGambleOutcome(user, bet, win, multiplier, label) {
+      isGamblingSpinning = false;
+      const spinBtn = document.getElementById('gamble-spin-btn');
+      spinBtn.disabled = false;
+      spinBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+
+      const resBox = document.getElementById('gamble-result-box');
+      if (win && multiplier > 0) {
+        const payout = bet * multiplier;
+        user.balance += payout;
+        const dm = ensureUserDailyMission(user);
+        dm.gambleWon = true;
+        dm.earnedYisiu += payout;
+        resBox.className = 'p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs font-black text-emerald-700';
+        resBox.innerText = `🎊 [${label}] 총 +${formatKoreanNumber(payout)} 이수 획득!`;
+        showToast(`${label}! +${formatKoreanNumber(payout)} 이수!`, 'success');
+      } else {
+        resBox.className = 'p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-center text-xs font-black text-rose-700';
+        resBox.innerText = `💸 아쉽네요! 꽝 (-${formatKoreanNumber(bet)} 이수)`;
+        showToast('도박에 실패했습니다.', 'error');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    // ==================== TAB SWITCHERS ====================
+    function switchMiddleTab(tab) {
+      const shopPanel = document.getElementById('middle-shop-panel');
+      const enhPanel = document.getElementById('middle-enhance-panel');
+      const transPanel = document.getElementById('middle-transfer-panel');
+
+      const shopBtn = document.getElementById('subtab-shop-btn');
+      const enhBtn = document.getElementById('subtab-enhance-btn');
+      const transBtn = document.getElementById('subtab-transfer-btn');
+
+      shopPanel.classList.add('hidden');
+      enhPanel.classList.add('hidden');
+      transPanel.classList.add('hidden');
+
+      shopBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+      enhBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+      transBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+
+      if (tab === 'shop') {
+        shopPanel.classList.remove('hidden');
+        shopBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-blue-600 shadow-sm transition whitespace-nowrap';
+      } else if (tab === 'enhance') {
+        enhPanel.classList.remove('hidden');
+        enhBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-indigo-600 shadow-sm transition whitespace-nowrap';
+      } else {
+        transPanel.classList.remove('hidden');
+        transBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-blue-600 shadow-sm transition whitespace-nowrap';
+      }
+    }
+
+    function switchRightTab(tab) {
+      const stockPanel = document.getElementById('right-stocks-panel');
+      const gamblePanel = document.getElementById('right-gamble-panel');
+      const stockBtn = document.getElementById('righttab-stocks-btn');
+      const gambleBtn = document.getElementById('righttab-gamble-btn');
+
+      if (tab === 'stocks') {
+        stockPanel.classList.remove('hidden');
+        gamblePanel.classList.add('hidden');
+        stockBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-emerald-600 shadow-sm transition whitespace-nowrap';
+        gambleBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+        updateStocksUI();
+      } else {
+        stockPanel.classList.add('hidden');
+        gamblePanel.classList.remove('hidden');
+        gambleBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-amber-600 shadow-sm transition whitespace-nowrap';
+        stockBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
+        drawRouletteWheel(rouletteCurrentDeg);
+      }
+    }
+
+    // ==================== REFRESH LOBBY & HEADER VIEWS ====================
+    function updateHeaderAndStats() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+
+      const banMsg = checkUserBanStatus(user);
+      if (banMsg) {
+        handleLogout();
+        showToast(banMsg, 'error');
+        return;
+      }
+
+      const formattedBal = `${formatKoreanNumber(user.balance)} 이수`;
+      document.getElementById('header-balance').innerText = formattedBal;
+      document.getElementById('top-balance-mini').innerText = formattedBal;
+      document.getElementById('header-click-power').innerText = `+${formatKoreanNumber(getClickPower(user))} 이수`;
+      document.getElementById('header-per-sec').innerText = `+${formatKoreanNumber(getPerSecondIncome(user))} /초`;
+      document.getElementById('header-username').innerText = user.nickname;
+
+      const roleInfo = ROLES[user.role] || ROLES.PLAYER;
+      const badge = document.getElementById('header-role-badge');
+      badge.innerText = roleInfo.label;
+      badge.className = `text-[11px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${roleInfo.badgeClass}`;
+
+      document.getElementById('enhance-level-pill').innerText = `강화 ${user.enhanceLevel || 0}강`;
+      document.getElementById('stat-total-clicks').innerText = (user.totalClicks || 0).toLocaleString();
+
+      const lockOverlay = document.getElementById('admin-click-lock-overlay');
+      lockOverlay.classList.toggle('hidden', user.role === 'PLAYER');
+
+      const lobbyAdminBtn = document.getElementById('lobby-admin-open-btn');
+      lobbyAdminBtn.classList.toggle('hidden', user.role === 'PLAYER');
+
+      const noticeBar = document.getElementById('global-notice-bar');
+      if (appDB.serverSettings.notice) {
+        noticeBar.classList.remove('hidden');
+        document.getElementById('global-notice-text').innerText = appDB.serverSettings.notice;
+      } else {
+        noticeBar.classList.add('hidden');
+      }
+
+      const multBanner = document.getElementById('server-multiplier-banner');
+      const headerMultPill = document.getElementById('header-mult-pill');
+      const mult = appDB.serverSettings.globalMultiplier || 1;
+      if (mult > 1) {
+        multBanner.classList.remove('hidden');
+        headerMultPill.classList.remove('hidden');
+        document.getElementById('banner-mult-val').innerText = mult;
+        headerMultPill.innerText = `전서버 ${mult}배 이벤트 중!`;
+      } else {
+        multBanner.classList.add('hidden');
+        headerMultPill.classList.add('hidden');
+      }
+
+      document.getElementById('gamble-odds-display').innerText = `${appDB.serverSettings.casinoOdds ?? 50}%`;
+    }
+
+    function refreshAllViews() {
+      updateHeaderAndStats();
+      renderDailyMissions();
+      renderUpgradeShop();
+      renderEnhancementPanel();
+      renderTransferTargets();
+      updateStocksUI();
+      if (!document.getElementById('admin-panel-modal').classList.contains('hidden')) {
+        renderAdminPanel();
+      }
+    }
+
+    // ==================== ADMIN PANEL CONTROLS ====================
+    function openAdminPanelFromLobby() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user || user.role === 'PLAYER') {
+        showToast('관리자 권한이 없습니다.', 'error');
+        return;
+      }
+      document.getElementById('admin-panel-modal').classList.remove('hidden');
+      renderAdminPanel();
+    }
+
+    function closeAdminPanel() {
+      document.getElementById('admin-panel-modal').classList.add('hidden');
+    }
+
+    function renderAdminPanel() {
+      if (!currentUserNickname) return;
+      const adminUser = appDB.users[currentUserNickname];
+      if (!adminUser) return;
+
+      const role = adminUser.role;
+      document.getElementById('admin-active-role-label').innerText = `현재 직급: ${ROLES[role]?.label || role}`;
+      document.getElementById('admin-current-mult').innerText = `${appDB.serverSettings.globalMultiplier || 1}배`;
+      document.getElementById('admin-odds-slider').value = appDB.serverSettings.casinoOdds ?? 50;
+      document.getElementById('admin-odds-val').innerText = `${appDB.serverSettings.casinoOdds ?? 50}%`;
+
+      const isSuper = role === 'SUPER_ADMIN';
+      const isGeneralOrSuper = role === 'SUPER_ADMIN' || role === 'GENERAL_ADMIN';
+
+      document.getElementById('admin-role-appoint-box').classList.toggle('hidden', !isSuper);
+      document.getElementById('admin-account-queue-box').classList.toggle('hidden', !isSuper);
+      document.getElementById('admin-ban-section').classList.toggle('hidden', !isGeneralOrSuper);
+      document.getElementById('admin-server-events-box').classList.toggle('hidden', !isGeneralOrSuper);
+      document.getElementById('btn-admin-set-score').classList.toggle('hidden', !isGeneralOrSuper);
+      document.getElementById('btn-admin-reset-score').classList.toggle('hidden', !isGeneralOrSuper);
+      document.getElementById('admin-per-sec-box').classList.toggle('hidden', !isGeneralOrSuper);
+
+      const select = document.getElementById('admin-user-select');
+      const prevSelected = select.value;
+      const userKeys = Object.keys(appDB.users);
+      document.getElementById('admin-total-users-count').innerText = `총 ${userKeys.length}명`;
+
+      select.innerHTML = '';
+      userKeys.forEach(nick => {
+        const u = appDB.users[nick];
+        const opt = document.createElement('option');
+        opt.value = nick;
+        opt.innerText = `${nick} [${ROLES[u.role]?.label || '플레이어'}]`;
+        select.appendChild(opt);
+      });
+
+      if (prevSelected && userKeys.includes(prevSelected)) {
+        select.value = prevSelected;
+      }
+      renderSelectedUserDetail();
+      renderPendingRequestsList();
+    }
+
+    function renderSelectedUserDetail() {
+      const select = document.getElementById('admin-user-select');
+      const targetNick = select.value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      document.getElementById('sel-u-name').innerText = target.nickname;
+      document.getElementById('sel-u-pass').innerText = target.password;
+      document.getElementById('sel-u-role').innerText = ROLES[target.role]?.label || '일반 플레이어';
+      document.getElementById('sel-u-balance').innerText = `${formatKoreanNumber(target.balance)} 이수`;
+      document.getElementById('sel-u-stats').innerText = `${formatKoreanNumber(getPerSecondIncome(target))}/초 · ${target.enhanceLevel || 0}강`;
+
+      const banEl = document.getElementById('sel-u-ban');
+      if (!target.ban) {
+        banEl.innerText = '정상';
+        banEl.className = 'font-black text-emerald-600';
+      } else if (target.ban.type === 'PERM') {
+        banEl.innerText = '영구 일관밴';
+        banEl.className = 'font-black text-rose-600';
+      } else if (target.ban.type === 'TIMED') {
+        const rem = Math.max(0, Math.ceil((target.ban.until - Date.now()) / 1000));
+        banEl.innerText = rem > 0 ? `시간 일관밴 (${formatDurationKorean(rem)} 남음)` : '정상';
+        banEl.className = rem > 0 ? 'font-black text-rose-600' : 'font-black text-emerald-600';
+      }
+    }
+
+    function adminModifyBalance(mode) {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      if (mode === 'reset') {
+        target.balance = 0;
+        saveDB();
+        showToast(`${targetNick} 님의 이수를 0으로 초기화했습니다.`, 'info');
+        refreshAllViews();
+        return;
+      }
+
+      const amount = parseKoreanNumber(document.getElementById('admin-amount-input').value);
+      if (amount <= 0 && mode !== 'set') {
+        showToast('올바른 숫자를 입력하세요 (예: 10조, 5해).', 'error');
+        return;
+      }
+
+      if (mode === 'add') {
+        target.balance += amount;
+        showToast(`${targetNick} 님에게 ${formatKoreanNumber(amount)} 이수 지급 완료!`, 'success');
+      } else if (mode === 'sub') {
+        target.balance = Math.max(0, target.balance - amount);
+        showToast(`${targetNick} 님의 이수 ${formatKoreanNumber(amount)} 차감 완료!`, 'warning');
+      } else if (mode === 'set') {
+        target.balance = Math.max(0, amount);
+        showToast(`${targetNick} 님의 이수를 ${formatKoreanNumber(amount)} 이수로 변경했습니다.`, 'info');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    function adminModifyPerSec(mode) {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      const amount = parseKoreanNumber(document.getElementById('admin-amount-input').value);
+      if (amount <= 0) {
+        showToast('초당 이수 수치를 입력하세요.', 'error');
+        return;
+      }
+
+      if (mode === 'add') {
+        target.adminPerSec = (target.adminPerSec || 0) + amount;
+        showToast(`${targetNick} 님 초당 이수 +${formatKoreanNumber(amount)} 지급!`, 'success');
+      } else {
+        target.adminPerSec = (target.adminPerSec || 0) - amount;
+        showToast(`${targetNick} 님 초당 이수 -${formatKoreanNumber(amount)} 차감!`, 'warning');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    function adminAppointRole(newRole) {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      target.role = newRole;
+      saveDB();
+      showToast(`${targetNick} 님을 [${ROLES[newRole].label}]로 임명했습니다!`, 'success');
+      refreshAllViews();
+    }
+
+    function applyIlgwanBanPreset(durationOrPerm, label) {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      if (durationOrPerm === 'PERM') {
+        target.ban = { type: 'PERM' };
+        showToast(`${targetNick} 님에게 영구 일관밴을 적용했습니다.`, 'error');
+      } else {
+        target.ban = {
+          type: 'TIMED',
+          until: Date.now() + durationOrPerm * 1000
+        };
+        showToast(`${targetNick} 님에게 ${label} 일관밴을 적용했습니다.`, 'warning');
+      }
+
+      saveDB();
+      refreshAllViews();
+    }
+
+    function applyCustomIlgwanBan() {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      const val = parseInt(document.getElementById('custom-ban-value').value, 10);
+      const unitSec = parseInt(document.getElementById('custom-ban-unit').value, 10);
+      if (!val || val <= 0) {
+        showToast('원하는 밴 시간을 정확히 입력하세요.', 'error');
+        return;
+      }
+
+      const totalSec = val * unitSec;
+      target.ban = {
+        type: 'TIMED',
+        until: Date.now() + totalSec * 1000
+      };
+      saveDB();
+      showToast(`${targetNick} 님에게 ${formatDurationKorean(totalSec)} 일관밴을 적용했습니다.`, 'warning');
+      refreshAllViews();
+    }
+
+    function unbanSelectedUser() {
+      const targetNick = document.getElementById('admin-user-select').value;
+      const target = appDB.users[targetNick];
+      if (!target) return;
+
+      target.ban = null;
+      saveDB();
+      showToast(`${targetNick} 님의 일관밴이 해제되었습니다.`, 'success');
+      refreshAllViews();
+    }
+
+    function renderPendingRequestsList() {
+      const list = document.getElementById('admin-pending-list');
+      const badge = document.getElementById('pending-req-badge');
+      badge.innerText = `${appDB.pendingRequests.length}건`;
+
+      if (appDB.pendingRequests.length === 0) {
+        list.innerHTML = '<div class="text-xs text-slate-400 text-center py-3">대기 중인 회원가입 요청이 없습니다.</div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      appDB.pendingRequests.forEach((req, idx) => {
+        const row = document.createElement('div');
+        row.className = 'p-2.5 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-2';
+        row.innerHTML = `
+          <div class="text-xs">
+            <div class="font-black text-slate-900">${req.nickname} <span class="text-slate-400 font-normal">(${req.requestedAt})</span></div>
+            <div class="text-[11px] text-rose-600 font-bold">비번: ${req.password}</div>
+          </div>
+          <div class="flex gap-1 shrink-0">
+            <button onclick="approveAccountRequest(${idx})" class="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-lg whitespace-nowrap">생성 승인</button>
+            <button onclick="rejectAccountRequest(${idx})" class="px-2 py-1.5 bg-slate-300 hover:bg-slate-400 text-slate-800 text-[11px] font-bold rounded-lg whitespace-nowrap">거절</button>
+          </div>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function approveAccountRequest(idx) {
+      const req = appDB.pendingRequests[idx];
+      if (!req) return;
+
+      appDB.users[req.nickname] = {
+        nickname: req.nickname,
+        password: req.password,
+        role: 'PLAYER',
+        balance: 0,
+        adminPerSec: 0,
+        enhanceLevel: 0,
+        totalClicks: 0,
+        upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+        stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        dailyMission: getDefaultDailyMission(),
+        ban: null
+      };
+      appDB.pendingRequests.splice(idx, 1);
+      saveDB();
+      showToast(`${req.nickname} 계정이 생성(승인)되었습니다!`, 'success');
+      refreshAllViews();
+    }
+
+    function rejectAccountRequest(idx) {
+      appDB.pendingRequests.splice(idx, 1);
+      saveDB();
+      showToast('요청을 거절했습니다.', 'info');
+      renderAdminPanel();
+    }
+
+    function adminDirectCreateAccount(e) {
+      e.preventDefault();
+      const nick = document.getElementById('admin-new-nick').value.trim();
+      const pass = document.getElementById('admin-new-pass').value.trim();
+      if (!nick || !pass) return;
+
+      if (appDB.users[nick]) {
+        showToast('이미 존재하는 닉네임입니다.', 'error');
+        return;
+      }
+
+      appDB.users[nick] = {
+        nickname: nick,
+        password: pass,
+        role: 'PLAYER',
+        balance: 0,
+        adminPerSec: 0,
+        enhanceLevel: 0,
+        totalClicks: 0,
+        upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+        stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        dailyMission: getDefaultDailyMission(),
+        ban: null
+      };
+      saveDB();
+
+      document.getElementById('admin-new-nick').value = '';
+      document.getElementById('admin-new-pass').value = '';
+      showToast(`[${nick}] 계정이 생성되어 영구 저장되었습니다!`, 'success');
+      refreshAllViews();
+    }
+
+    function setGlobalMultiplier(mult) {
+      appDB.serverSettings.globalMultiplier = mult;
+      saveDB();
+      showToast(`전서버 이수 ${mult}배가 적용되었습니다!`, 'success');
+      refreshAllViews();
+    }
+
+    function triggerGlobalStockEvent(type) {
+      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+        const st = appDB.serverSettings.stocks[k];
+        if (type === 'surge') {
+          st.price = Math.max(10, Math.floor(st.price * 3));
+        } else {
+          st.price = Math.max(10, Math.floor(st.price * 0.2));
+        }
+        st.history.push(st.price);
+        if (st.history.length > 15) st.history.shift();
+      });
+      saveDB();
+      showToast(type === 'surge' ? '🚀 전서버 주식 3배 폭등 적용!' : '📉 전서버 주식 80% 하락 적용!', type === 'surge' ? 'success' : 'error');
+      refreshAllViews();
+    }
+
+    function saveCasinoOdds() {
+      const val = parseInt(document.getElementById('admin-odds-slider').value, 10);
+      appDB.serverSettings.casinoOdds = Math.min(100, Math.max(0, val));
+      saveDB();
+      showToast(`도박장 당첨 확률이 ${appDB.serverSettings.casinoOdds}%로 변경되었습니다.`, 'success');
+      refreshAllViews();
+    }
+
+    function broadcastServerNotice() {
+      const text = document.getElementById('admin-notice-input').value.trim();
+      if (!text) return;
+      appDB.serverSettings.notice = text;
+      saveDB();
+      document.getElementById('admin-notice-input').value = '';
+      showToast('전서버 공지가 송출되었습니다!', 'success');
+      refreshAllViews();
+    }
+
+    function clearServerNotice() {
+      appDB.serverSettings.notice = '';
+      saveDB();
+      showToast('전서버 공지를 내렸습니다.', 'info');
+      refreshAllViews();
+    }
+
+    function exportDatabaseBackup() {
+      const dataStr = JSON.stringify(appDB, null, 2);
+      const textarea = document.createElement('textarea');
+      textarea.value = dataStr;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      showToast('전체 계정 데이터가 클립보드에 복사되었습니다!', 'success');
+    }
+
+    // ==================== REAL-TIME LOOPS ====================
+    window.addEventListener('resize', () => {
+      if (currentUserNickname) updateStocksUI();
+    });
+
+    setInterval(() => {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+
+      const pps = getPerSecondIncome(user);
+      if (pps !== 0) {
+        user.balance = Math.max(0, user.balance + pps);
+        if (pps > 0) {
+          ensureUserDailyMission(user).earnedYisiu += pps;
+        }
+        saveDB(false);
+        updateHeaderAndStats();
+        renderDailyMissions();
+        renderUpgradeShop();
+      }
+    }, 1000);
+
+    setInterval(() => {
+      if (!currentUserNickname) return;
+      if (Date.now() - (appDB.serverSettings.stockTickAt || 0) < 3500) return;
+      appDB.serverSettings.stockTickAt = Date.now();
+      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+        const st = appDB.serverSettings.stocks[k];
+        const delta = (Math.random() - 0.48) * 0.08;
+        st.price = Math.max(10, Math.round(st.price * (1 + delta)));
+        st.history.push(st.price);
+        if (st.history.length > 15) st.history.shift();
+      });
+      saveDB(false);
+      updateStocksUI();
+    }, 4000);
+  </script>
+</body>
+</html>
