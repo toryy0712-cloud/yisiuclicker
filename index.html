@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>이수 클릭커</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; }
@@ -45,21 +44,32 @@
       white-space: nowrap;
       animation: marquee 18s linear infinite;
     }
+    @keyframes bgshift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+    body.season-on #lobby-screen .bg-white { background-color: rgba(255,255,255,0.68) !important; }
+    body.season-on #lobby-screen .bg-slate-50 { background-color: rgba(255,255,255,0.45) !important; }
+    .cup{position:absolute;left:7px;top:0;width:56px;height:72px;transition:transform .3s ease;}
+    .cup-body{position:absolute;inset:0;background:linear-gradient(160deg,#fb923c,#b45309);clip-path:polygon(14% 0,86% 0,100% 100%,0 100%);transition:transform .3s ease;}
+    .cup.lift .cup-body{transform:translateY(-46px);}
+    .cup .ball{position:absolute;left:50%;bottom:4px;width:22px;height:22px;margin-left:-11px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff,#ef4444 55%,#991b1b);}
+    .cup.pickable{cursor:pointer;}
+    .cup.pickable:hover .cup-body{transform:translateY(-8px);}
+    @keyframes auraPulse { 0%,100%{opacity:.75;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)} }
+    @keyframes auraRise { 0%{opacity:0;transform:translateY(8px) scale(.6)} 20%{opacity:1} 100%{opacity:0;transform:translateY(-46px) scale(1.15)} }
+    @keyframes auraFlash { 0%{opacity:0;transform:scale(.5) rotate(0)} 30%{opacity:1} 100%{opacity:0;transform:scale(1.5) rotate(25deg)} }
+    @keyframes auraSpin { to{transform:rotate(360deg)} }
+    @keyframes tikiFloat { 0%{opacity:0;transform:translateY(0) rotate(-8deg)} 15%{opacity:.95} 100%{opacity:0;transform:translateY(-70vh) rotate(10deg)} }
+    .aura-p{position:absolute;pointer-events:none;line-height:1;}
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+  <div id="season-bg" class="hidden" style="position:fixed;inset:0;z-index:-1;pointer-events:none;background-size:300% 300%;animation:bgshift 18s ease infinite;"></div>
 
-  <!-- Global Notice Banner -->
-  <div id="global-notice-bar" class="hidden bg-indigo-600 text-white py-1.5 px-4 text-sm font-bold shadow-sm overflow-hidden shrink-0">
-    <div class="flex items-center gap-2">
-      <span class="bg-white text-indigo-700 text-xs px-2 py-0.5 rounded font-black whitespace-nowrap">📢 서버 공지</span>
-      <div class="overflow-hidden flex-1">
-        <div id="global-notice-text" class="animate-marquee"></div>
-      </div>
-    </div>
+  <!-- Global Notice Banner: 화면 위 중앙에 크게 -->
+  <div id="global-notice-bar" class="hidden" style="position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:80;max-width:92vw;pointer-events:none;">
+    <div id="global-notice-text" class="bg-indigo-700 text-white text-xl md:text-3xl font-black px-6 py-3 rounded-2xl shadow-2xl text-center border-2 border-white/60"></div>
   </div>
 
   <!-- Server Multiplier Banner -->
@@ -76,7 +86,7 @@
       <!-- Left Branding -->
       <div class="p-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex flex-col justify-between">
         <div>
-          <span class="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-black mb-4">YISIU CLICKER ARCADE</span>
+          <span class="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-black mb-4">ISU CLICKER ARCADE</span>
           <h1 class="text-4xl font-black tracking-tight mb-3">이수 클릭커</h1>
           <p class="text-blue-100 text-sm leading-relaxed">
             이수를 클릭하고 강화하며, Cursor와 할머니를 고용해 거대한 자산을 모아보세요. 실시간 주식 거래소와 행운의 도박장까지 한 화면에서 즐길 수 있습니다.
@@ -163,6 +173,9 @@
         <span id="header-mult-pill" class="hidden px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-xs font-black whitespace-nowrap">
           전서버 2배 이벤트 중!
         </span>
+        <span id="cloud-status" class="hidden px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-300 text-xs font-black whitespace-nowrap">☁️ 연결 중</span>
+        <span id="header-season-pill" class="hidden px-2.5 py-1 rounded-full bg-pink-100 text-pink-800 border border-pink-300 text-xs font-black whitespace-nowrap"></span>
+        <button id="raid-enter-btn" onclick="enterRaid()" class="hidden px-2.5 py-1 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs font-black whitespace-nowrap animate-pulse">⚔️ 레이드 입장</button>
       </div>
 
       <div class="flex items-center gap-3">
@@ -174,9 +187,13 @@
           <span id="header-username" class="text-xs font-black text-slate-900 whitespace-nowrap">플레이어</span>
           <span id="header-role-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 whitespace-nowrap">일반 플레이어</span>
         </div>
-        <button onclick="handleLogout()"
+        <button onclick="openLogoutConfirm()"
           class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-black rounded-xl shadow-sm transition whitespace-nowrap">
           로그아웃
+        </button>
+        <button onclick="goToSite()"
+          class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-sm transition whitespace-nowrap">
+          시현클리커 가기
         </button>
       </div>
     </header>
@@ -206,10 +223,11 @@
 
           <!-- Circular Click Button -->
           <div id="click-area" class="relative flex items-center justify-center my-2">
-            <button id="yisiu-circle-btn" onclick="handleYisiuClick(event)"
+            <div id="aura-layer" style="position:absolute;width:176px;height:176px;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:5;"></div>
+            <button id="isu-circle-btn" onclick="handleIsuClick(event)"
               class="w-44 h-44 rounded-full overflow-hidden border-4 border-indigo-500 shadow-xl relative group focus:outline-none transition-transform">
               <img src="data:image/jpeg;base64,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" alt="이수 클릭!"
-                onerror="this.src='https://placehold.co/300x300/4f46e5/ffffff?text=YISIU'"
+                onerror="this.src='https://placehold.co/300x300/4f46e5/ffffff?text=ISU'"
                 class="w-full h-full object-cover" />
               <div class="absolute inset-0 bg-slate-900/30 group-hover:bg-slate-900/20 flex flex-col items-center justify-center transition">
                 <span class="px-3.5 py-1.5 rounded-full bg-white/95 text-slate-900 font-black text-sm shadow-md whitespace-nowrap">
@@ -222,6 +240,16 @@
                 <span class="text-xs font-black">관리자 클릭 불가</span>
               </div>
             </button>
+          </div>
+
+          <div class="w-full mt-3">
+            <div class="flex items-center justify-between text-xs font-black mb-1">
+              <span id="combo-count" class="text-slate-500">🔥 0 콤보</span>
+              <span id="combo-bonus" class="text-slate-400">+0% (최대 +200%)</span>
+            </div>
+            <div class="h-2 rounded-full bg-slate-200 overflow-hidden">
+              <div id="combo-bar" class="h-full bg-gradient-to-r from-amber-400 to-rose-500" style="width:0%"></div>
+            </div>
           </div>
 
           <div class="text-xs font-bold text-slate-500 mt-2 whitespace-nowrap">
@@ -253,9 +281,9 @@
               <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
                 <div>
                   <div class="font-bold text-slate-800">2. 10만 이수 모으기</div>
-                  <div id="dm-prog-yisiu" class="text-[11px] text-slate-500 font-semibold">0 / 10만 이수</div>
+                  <div id="dm-prog-isu" class="text-[11px] text-slate-500 font-semibold">0 / 10만 이수</div>
                 </div>
-                <span id="dm-status-yisiu" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">진행중</span>
+                <span id="dm-status-isu" class="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap">진행중</span>
               </div>
 
               <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
@@ -280,6 +308,16 @@
             class="mt-3 w-full py-3 bg-slate-200 text-slate-500 font-black rounded-xl text-xs transition cursor-not-allowed whitespace-nowrap">
             🎁 일일 미션 보상 25만 이수 받기
           </button>
+        </div>
+              <!-- Daily Login Reward -->
+        <div class="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-black text-slate-900 flex items-center gap-1.5 whitespace-nowrap"><span>🎁</span> 오늘의 보상</h3>
+            <span id="login-reward-streak" class="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">1일차</span>
+          </div>
+          <p class="text-[11px] text-slate-500 font-semibold mb-2">매일 보유 이수의 75%를 받아요! (<span id="login-reward-preview">0</span> 이수)</p>
+          <button id="login-reward-btn" onclick="claimLoginReward()"
+            class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl text-xs transition whitespace-nowrap">1일차 보상 받기</button>
         </div>
       </section>
 
@@ -378,180 +416,38 @@
         </div>
       </section>
 
-      <!-- RIGHT COLUMN (4 cols): 실시간 주식 (3종) & 이수 도박장 -->
-      <section class="col-span-4 flex flex-col">
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm flex-1 flex flex-col">
-          <!-- 2 Clean Horizontal Tabs -->
-          <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-3 shrink-0">
-            <button id="righttab-stocks-btn" onclick="switchRightTab('stocks')"
-              class="py-2 px-2 text-xs font-black rounded-lg bg-white text-emerald-600 shadow-sm transition whitespace-nowrap">
-              📈 실시간 주식 (3종)
-            </button>
-            <button id="righttab-gamble-btn" onclick="switchRightTab('gamble')"
-              class="py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap">
-              🎰 이수 도박장
-            </button>
-          </div>
-
-          <!-- RIGHT TAB 1: 3 Real-Time Stocks (이수마트, 시현디아, 이시전자) -->
-          <div id="right-stocks-panel" class="flex-1 flex flex-col justify-between space-y-2.5 overflow-y-auto pr-1">
-            <!-- Stock 1: 이수마트 -->
-            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between mb-1">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이수마트</span>
-                    <span id="stock-owned-yisiumart" class="text-xs font-bold text-blue-600 whitespace-nowrap">보유: 0주</span>
-                  </div>
-                  <div id="stock-roi-yisiumart" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
-                </div>
-                <div class="text-right">
-                  <div id="stock-price-yisiumart" class="font-black text-sm text-slate-900 whitespace-nowrap">1,000 이수</div>
-                  <div class="flex items-center justify-end gap-1 mt-0.5">
-                    <span id="stock-diff-yisiumart" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
-                    <span id="stock-base-diff-yisiumart" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
-                  </div>
-                </div>
-              </div>
-              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
-                <canvas id="canvas-stock-yisiumart" class="w-full h-full block"></canvas>
-              </div>
-              <div class="grid grid-cols-5 gap-1">
-                <button onclick="tradeStock('yisiumart', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
-                <button onclick="tradeStock('yisiumart', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
-                <button onclick="tradeStock('yisiumart', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
-                <button onclick="tradeStock('yisiumart', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
-                <button onclick="tradeStock('yisiumart', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
-              </div>
-            </div>
-
-            <!-- Stock 2: 시현디아 -->
-            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between mb-1">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">시현디아</span>
-                    <span id="stock-owned-sihyundia" class="text-xs font-bold text-purple-600 whitespace-nowrap">보유: 0주</span>
-                  </div>
-                  <div id="stock-roi-sihyundia" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
-                </div>
-                <div class="text-right">
-                  <div id="stock-price-sihyundia" class="font-black text-sm text-slate-900 whitespace-nowrap">5,000 이수</div>
-                  <div class="flex items-center justify-end gap-1 mt-0.5">
-                    <span id="stock-diff-sihyundia" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
-                    <span id="stock-base-diff-sihyundia" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
-                  </div>
-                </div>
-              </div>
-              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
-                <canvas id="canvas-stock-sihyundia" class="w-full h-full block"></canvas>
-              </div>
-              <div class="grid grid-cols-5 gap-1">
-                <button onclick="tradeStock('sihyundia', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
-                <button onclick="tradeStock('sihyundia', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
-                <button onclick="tradeStock('sihyundia', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
-                <button onclick="tradeStock('sihyundia', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
-                <button onclick="tradeStock('sihyundia', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
-              </div>
-            </div>
-
-            <!-- Stock 3: 이시전자 -->
-            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
-              <div class="flex items-center justify-between mb-1">
-                <div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이시전자</span>
-                    <span id="stock-owned-isijeonja" class="text-xs font-bold text-emerald-600 whitespace-nowrap">보유: 0주</span>
-                  </div>
-                  <div id="stock-roi-isijeonja" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
-                </div>
-                <div class="text-right">
-                  <div id="stock-price-isijeonja" class="font-black text-sm text-slate-900 whitespace-nowrap">1만 이수</div>
-                  <div class="flex items-center justify-end gap-1 mt-0.5">
-                    <span id="stock-diff-isijeonja" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
-                    <span id="stock-base-diff-isijeonja" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
-                  </div>
-                </div>
-              </div>
-              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
-                <canvas id="canvas-stock-isijeonja" class="w-full h-full block"></canvas>
-              </div>
-              <div class="grid grid-cols-5 gap-1">
-                <button onclick="tradeStock('isijeonja', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
-                <button onclick="tradeStock('isijeonja', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
-                <button onclick="tradeStock('isijeonja', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
-                <button onclick="tradeStock('isijeonja', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
-                <button onclick="tradeStock('isijeonja', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- RIGHT TAB 2: Gambling Arena (행운의 룰렛 + 슬롯머신) -->
-          <div id="right-gamble-panel" class="hidden flex-1 flex flex-col justify-between space-y-3 overflow-y-auto pr-1">
-            <!-- Mode Switcher & Odds -->
-            <div class="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-              <div class="flex gap-1.5">
-                <button id="gamble-mode-roulette-btn" onclick="switchGambleMode('roulette')"
-                  class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black shadow-sm transition whitespace-nowrap">
-                  🎡 행운의 룰렛
-                </button>
-                <button id="gamble-mode-slot-btn" onclick="switchGambleMode('slot')"
-                  class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 text-xs font-black transition whitespace-nowrap">
-                  🎰 슬롯머신
-                </button>
-              </div>
-              <div class="text-right whitespace-nowrap">
-                <span class="text-[10px] font-bold text-slate-500 block">설정 승률</span>
-                <span id="gamble-odds-display" class="text-sm font-black text-amber-600">50%</span>
-              </div>
-            </div>
-
-            <!-- Mode A: Spinning Roulette Canvas -->
-            <div id="gamble-roulette-view" class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-col items-center justify-center relative">
-              <div class="relative w-44 h-44 flex items-center justify-center">
-                <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[18px] border-t-rose-600 drop-shadow"></div>
-                <canvas id="roulette-canvas" width="220" height="220" class="w-44 h-44 rounded-full shadow-lg"></canvas>
-              </div>
-              <div class="text-[11px] text-slate-500 font-bold mt-2">
-                2배 · 3배 · 5배 · JACKPOT(10배) 찬스!
-              </div>
-            </div>
-
-            <!-- Mode B: 3-Reel Slot Machine -->
-            <div id="gamble-slot-view" class="hidden bg-slate-900 rounded-2xl p-4 border border-slate-800 text-center space-y-2.5">
-              <div class="text-[11px] font-black text-amber-400 tracking-wider">YISIU 3-REEL SLOTS</div>
-              <div class="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
-                <div id="slot-reel-1" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">💎</div>
-                <div id="slot-reel-2" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">🍀</div>
-                <div id="slot-reel-3" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">👑</div>
-              </div>
-              <div class="text-[11px] text-slate-400 font-bold">
-                3개 일치 시 <span class="text-amber-400">2배 ~ 7배</span> 잭팟 당첨!
-              </div>
-            </div>
-
-            <!-- Bet Input -->
-            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-              <label class="block text-xs font-bold text-slate-600">베팅 금액 (예: 1000, 1만, 100조)</label>
-              <input type="text" id="gamble-bet-input" placeholder="베팅할 이수 입력"
-                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold outline-none focus:border-amber-500" />
-              <div class="grid grid-cols-3 gap-1.5">
-                <button type="button" onclick="setGambleBetRatio(0.25)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">25%</button>
-                <button type="button" onclick="setGambleBetRatio(0.5)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">50%</button>
-                <button type="button" onclick="setGambleBetRatio(1)" class="py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-black rounded-lg">올인</button>
-              </div>
-            </div>
-
-            <div id="gamble-result-box" class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-600">
-              룰렛 또는 슬롯을 돌려 행운을 시험해보세요!
-            </div>
-
-            <button id="gamble-spin-btn" onclick="handleGamble()"
-              class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl shadow-md transition text-sm">
-              🎡 룰렛 돌리기
-            </button>
-          </div>
-        </div>
+      <!-- RIGHT COLUMN (4 cols): 각 기능이 따로따로 창으로 열립니다 -->
+      <section class="col-span-4 grid grid-cols-2 gap-3 auto-rows-fr content-start">
+        <button onclick="openStocksWindow()" class="bg-white rounded-2xl border border-emerald-200 p-4 shadow-sm hover:shadow-md hover:border-emerald-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">📈</span>
+          <span class="text-sm font-black text-slate-900">주식 창</span>
+          <span class="text-[11px] font-bold text-slate-500">실시간 주식</span>
+        </button>
+        <button onclick="openGambleWindow()" class="bg-white rounded-2xl border border-amber-200 p-4 shadow-sm hover:shadow-md hover:border-amber-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">🎰</span>
+          <span class="text-sm font-black text-slate-900">도박 창</span>
+          <span class="text-[11px] font-bold text-slate-500">룰렛 · 슬롯</span>
+        </button>
+        <button onclick="openCupWindow()" class="bg-white rounded-2xl border border-violet-200 p-4 shadow-sm hover:shadow-md hover:border-violet-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">🥤</span>
+          <span class="text-sm font-black text-slate-900">미니게임 창</span>
+          <span class="text-[11px] font-bold text-slate-500">복불복 컵 게임</span>
+        </button>
+        <button onclick="openRankWin()" class="bg-white rounded-2xl border border-sky-200 p-4 shadow-sm hover:shadow-md hover:border-sky-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">🏆</span>
+          <span class="text-sm font-black text-slate-900">랭킹 창</span>
+          <span class="text-[11px] font-bold text-slate-500">이수 · 환생 · 초당</span>
+        </button>
+        <button onclick="openRebirthWin()" class="bg-white rounded-2xl border border-rose-200 p-4 shadow-sm hover:shadow-md hover:border-rose-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">🔄</span>
+          <span class="text-sm font-black text-slate-900">환생 창</span>
+          <span class="text-[11px] font-bold text-slate-500">환생 · 환생 스킨</span>
+        </button>
+        <button onclick="openAuraWin()" class="bg-white rounded-2xl border border-fuchsia-200 p-4 shadow-sm hover:shadow-md hover:border-fuchsia-400 transition flex flex-col items-center justify-center gap-1 text-center">
+          <span class="text-4xl">✨</span>
+          <span class="text-sm font-black text-slate-900">아우라 창</span>
+          <span class="text-[11px] font-bold text-slate-500">이펙트 + 배수</span>
+        </button>
       </section>
     </main>
 
@@ -777,6 +673,47 @@
           </div>
 
           <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🌸 계절 이벤트 (중복 가능)</h3>
+            <p class="text-[11px] text-slate-500">현재 계절 보너스: <b id="admin-season-total" class="text-blue-600">+0%</b></p>
+            <div class="flex items-center gap-2">
+              <input id="admin-season-minutes" type="number" min="0" placeholder="0" class="w-20 px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold" />
+              <span class="text-[11px] text-slate-500 font-bold">분 동안 (0 또는 비움 = 끌 때까지)</span>
+            </div>
+            <div id="admin-season-list" class="grid grid-cols-2 gap-1.5"></div>
+            <button onclick="clearSeasons()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-black rounded-xl">모든 계절 끄기</button>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">👹 레이드 관리</h3>
+            <p id="admin-raid-status" class="text-[11px] text-slate-500 font-bold">레이드 비활성</p>
+            <input id="admin-raid-hp" type="text" placeholder="보스 HP (예: 1000000)" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold" />
+            <div class="grid grid-cols-2 gap-1.5">
+              <button onclick="startRaid()" class="py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl">⚔️ 레이드 활성화</button>
+              <button onclick="endRaid()" class="py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black rounded-xl">레이드 종료</button>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-rose-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🔄 환생 건너뛰기 (선택 유저)</h3>
+            <p class="text-[11px] text-slate-500 font-bold">위 "유저 선택"에서 고른 유저의 환생 단계를 바꿉니다.</p>
+            <select id="admin-rebirth-select" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold"><option value="0">0환생</option><option value="1">1환생</option><option value="2">2환생</option><option value="3">3환생</option><option value="4">4환생</option><option value="5">5환생</option><option value="6">6환생</option><option value="7">7환생</option><option value="8">8환생</option><option value="9">9환생</option><option value="10">10환생</option><option value="11">11환생</option><option value="12">12환생</option><option value="13">13환생</option><option value="14">14환생</option><option value="15">15환생</option><option value="16">16환생</option><option value="17">17환생</option><option value="18">18환생</option><option value="19">19환생</option><option value="20">20환생</option></select>
+            <button onclick="adminSetRebirth()" class="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl">환생 단계 적용</button>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🔗 사이트 이동 주소</h3>
+            <input id="admin-site-input" type="text" placeholder="sihyeonclicker2.vercel.app" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold" />
+            <button onclick="saveSiteUrl()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl">사이트 저장 ("시현클리커 가기" 버튼에 적용)</button>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-violet-200 shadow-sm space-y-2.5">
+            <h3 class="text-sm font-black text-slate-900">🥤 미니게임 랭킹 보상</h3>
+            <div id="admin-cup-ranking" class="space-y-1 text-xs font-bold text-slate-700"></div>
+            <button onclick="payCupRankingRewards()" class="w-full py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-black rounded-xl">1등 50만 · 2등 30만 · 3등 10만 지급</button>
+            <button onclick="resetCupRanking()" class="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-black rounded-xl">랭킹 초기화</button>
+          </div>
+
+          <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5">
             <h3 class="text-sm font-black text-slate-900">📊 전서버 주식 시장 조작</h3>
             <div class="grid grid-cols-1 gap-2">
               <button onclick="triggerGlobalStockEvent('surge')" class="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl">
@@ -823,9 +760,15 @@
 
   <!-- ==================== 5. JAVASCRIPT APPLICATION LOGIC ==================== -->
   <script>
-    const PERSISTENT_DB_KEY = 'yisiu_clicker_persistent_db_v1';
-    const LEGACY_KEYS = ['yisiu_clicker_db_v3', 'yisiu_clicker_db_v2', 'yisiu_clicker_db_v1', 'gemini_arcade_db'];
-    const MASTER_ADMIN_PASS = 'init-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); // 임시값. 실제 관리자 비밀번호는 Supabase users(최고관리자)에 저장
+    const PERSISTENT_DB_KEY = 'isu_clicker_persistent_db_v1';
+    const LEGACY_KEYS = ['isu_clicker_db_v3', 'isu_clicker_db_v2', 'isu_clicker_db_v1', 'gemini_arcade_db'];
+    const MASTER_ADMIN_PASS = '67670';
+    // ☁️ 다른 기기 연동: Firebase Realtime Database 주소를 여기에 넣으면 켜집니다.
+    // 예) 'https://내프로젝트-default-rtdb.firebasedatabase.app'  (비워두면 이 기기 안에서만 동작)
+    const CLOUD_DB_URL = '';
+    const CLOUD_ON = !!CLOUD_DB_URL;
+    const cloud = { snap: {}, dirty: new Set(), timer: null, pulling: false, unconfirmed: new Set(), deleted: {}, knownReq: null };
+
 
     const ROLES = {
       SUPER_ADMIN: { label: '최고 관리자', badgeClass: 'bg-purple-100 text-purple-700 border border-purple-200' },
@@ -837,13 +780,46 @@
     const UPGRADE_CATALOG = [
       { id: 'cursor', name: 'Cursor (커서)', icon: '🖱️', desc: '자동으로 이수를 클릭합니다', baseCost: 15, basePps: 1 },
       { id: 'grandma', name: '할머니', icon: '👵', desc: '따뜻한 이수를 정성껏 구워냅니다', baseCost: 100, basePps: 8 },
+      { id: 'farm', name: '이수 농장', icon: '🌾', desc: '비옥한 땅에서 이수를 재배합니다', baseCost: 1100, basePps: 45 },
       { id: 'factory', name: '이수 공장', icon: '🏭', desc: '컨베이어 벨트로 이수를 대량 생산합니다', baseCost: 12000, basePps: 260 },
+      { id: 'bank', name: '이수 은행', icon: '🏦', desc: '복리 이자로 이수를 불립니다', baseCost: 130000, basePps: 1400 },
       { id: 'quantum', name: '이수 양자컴퓨터', icon: '⚛️', desc: '양자 연산으로 이수를 창조합니다', baseCost: 1400000, basePps: 7800 },
       { id: 'island', name: '이수 섬', icon: '🏝️', desc: '이수가 넘쳐나는 섬을 통째로 운영합니다', baseCost: 10000000, basePps: 100000, growth: 1.25 },
       { id: 'boss', name: '보스 이수', icon: '👹', desc: '압도적인 보스 이수가 이수를 쏟아냅니다', baseCost: 1000000000, basePps: 5000000, growth: 1.25 },
       { id: 'impossible', name: '불가능 이수', icon: '🌀', desc: '불가능을 가능으로 만드는 이수', baseCost: 1000000000000000, basePps: 10000000000, growth: 1.25 },
       { id: 'infinite', name: '무한 이수', icon: '♾️', desc: '끝없이 샘솟는 무한의 이수', baseCost: 50000000000000000, basePps: 5000000000000, growth: 1.25 }
     ];
+
+    const REBIRTH_COSTS = [1e4, 2.5e4, 4e4, 1e5, 5e5, 1e6, 5e6, 1e7, 5e7, 1e8, 5e8, 1e9, 5e9, 1e10, 5e10, 1e11, 5e11, 1e12, 5e12, 1e13];
+    const REBIRTH_MULTS = [1.5, 2, 2.5, 10, 50, 100, 150, 500, 1000, 1500, 2000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+    const AURAS = [
+      { id: 'electric', name: '전기 아우라', icon: '⚡', price: 1250, mult: 2, color: '#facc15', desc: '이수에 전기가 지직!' },
+      { id: 'fire', name: '화염 아우라', icon: '🔥', price: 10000, mult: 5, color: '#f97316', desc: '이수가 활활 타오릅니다' },
+      { id: 'water', name: '물 아우라', icon: '💦', price: 100000, mult: 10, color: '#38bdf8', desc: '시원한 물방울이 튀어요' },
+      { id: 'stock', name: '주식 아우라', icon: '📈', price: 1000000, mult: 100, color: '#22c55e', desc: '주식 차트가 이수를 감싸요' },
+      { id: 'purple', name: '오오라 아우라', icon: '🔮', price: 10000000, mult: 1000, color: '#a855f7', desc: '신비한 보라색 오오라' },
+      { id: 'tiki', name: 'tiki 아우라', icon: '🗿', price: 100000000, mult: 1000, color: '#fb923c', desc: '화면 전체에 tiki 기운!' }
+    ];
+    const SKINS = [
+      { name: '새싹', icon: '🌱', color: '#84cc16', pct: 1 }, { name: '청동', icon: '🥉', color: '#b45309', pct: 5 },
+      { name: '은빛', icon: '🥈', color: '#94a3b8', pct: 10 }, { name: '황금', icon: '🥇', color: '#eab308', pct: 15 },
+      { name: '에메랄드', icon: '💚', color: '#10b981', pct: 20 }, { name: '사파이어', icon: '💙', color: '#3b82f6', pct: 25 },
+      { name: '루비', icon: '❤️', color: '#ef4444', pct: 30 }, { name: '자수정', icon: '💜', color: '#8b5cf6', pct: 35 },
+      { name: '진주', icon: '🤍', color: '#cbd5e1', pct: 40 }, { name: '불꽃', icon: '🔥', color: '#f97316', pct: 45 },
+      { name: '얼음', icon: '🧊', color: '#22d3ee', pct: 50 }, { name: '번개', icon: '⚡', color: '#facc15', pct: 55 },
+      { name: '은하', icon: '🌌', color: '#6366f1', pct: 60 }, { name: '달빛', icon: '🌙', color: '#a5b4fc', pct: 65 },
+      { name: '태양', icon: '☀️', color: '#fb923c', pct: 70 }, { name: '무지개', icon: '🌈', color: '#ec4899', pct: 75 },
+      { name: '용', icon: '🐲', color: '#16a34a', pct: 80 }, { name: '불사조', icon: '🦅', color: '#dc2626', pct: 85 },
+      { name: '왕관', icon: '👑', color: '#f59e0b', pct: 90 }, { name: '신(神)', icon: '✨', color: '#fde047', pct: 100 }
+    ];
+
+    const SEASONS = {
+      spring: { label: '봄', icon: '🌸', bonus: 0.25, colors: ['#ffe3ec', '#ffbcd3'] },
+      summer: { label: '여름', icon: '🌿', bonus: 0.25, colors: ['#d8f5c8', '#6fd387'] },
+      autumn: { label: '가을', icon: '🍁', bonus: 0.25, colors: ['#fde8c4', '#f0a04b'] },
+      winter: { label: '겨울', icon: '❄️', bonus: 0.5, colors: ['#e3f2ff', '#aed0f2'] },
+      chaos: { label: '혼돈', icon: '🌀', bonus: 1.0, colors: ['#6d28d9', '#2563eb', '#7c3aed', '#38bdf8'] }
+    };
 
     const KOREAN_UNITS = [
       { name: '정', value: 1e40 },
@@ -922,7 +898,7 @@
       return {
         date: getTodayDateString(),
         clicks: 0,
-        earnedYisiu: 0,
+        earnedIsu: 0,
         gambleWon: false,
         stockBought: false,
         claimed: false
@@ -940,9 +916,9 @@
             adminPerSec: 0,
             enhanceLevel: 0,
             totalClicks: 0,
-            upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
-            stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
-            stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+            upgrades: { cursor: 0, grandma: 0, farm: 0, factory: 0, bank: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+            stocks: { isumart: 0, sihyundia: 0, isijeonja: 0 },
+            stockAvgPrices: { isumart: 0, sihyundia: 0, isijeonja: 0 },
             dailyMission: getDefaultDailyMission(),
             ban: null
           }
@@ -953,7 +929,7 @@
           globalMultiplier: 1,
           notice: '',
           stocks: {
-            yisiumart: { name: '이수마트', basePrice: 1000, price: 1000, history: [950, 980, 1020, 990, 1000] },
+            isumart: { name: '이수마트', basePrice: 1000, price: 1000, history: [950, 980, 1020, 990, 1000] },
             sihyundia: { name: '시현디아', basePrice: 5000, price: 5000, history: [4800, 4950, 5100, 4900, 5000] },
             isijeonja: { name: '이시전자', basePrice: 10000, price: 10000, history: [9800, 10100, 9950, 10200, 10000] }
           }
@@ -961,7 +937,69 @@
       };
     }
 
-    function loadPersistentDB() { return appDB; } // Supabase 연동: 메모리 DB 반환
+    function loadPersistentDB() {
+      let db = null;
+      try {
+        const raw = localStorage.getItem(PERSISTENT_DB_KEY);
+        if (raw) {
+          db = JSON.parse(raw);
+        } else {
+          for (const oldKey of LEGACY_KEYS) {
+            const legacyRaw = localStorage.getItem(oldKey);
+            if (legacyRaw) {
+              const parsed = JSON.parse(legacyRaw);
+              if (parsed && parsed.users) {
+                db = parsed;
+                break;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('DB 로드 오류:', e);
+      }
+
+      const base = getDefaultDB();
+      if (!db || typeof db !== 'object') {
+        db = base;
+      } else {
+        db.users = { ...base.users, ...(db.users || {}) };
+        db.pendingRequests = Array.isArray(db.pendingRequests) ? db.pendingRequests : [];
+        db.serverSettings = {
+          ...base.serverSettings,
+          ...(db.serverSettings || {}),
+          stocks: {
+            ...base.serverSettings.stocks,
+            ...((db.serverSettings && db.serverSettings.stocks) || {})
+          }
+        };
+        ['isumart', 'sihyundia', 'isijeonja'].forEach(k => {
+          if (!db.serverSettings.stocks[k].basePrice) {
+            db.serverSettings.stocks[k].basePrice = base.serverSettings.stocks[k].basePrice;
+          }
+        });
+        Object.keys(db.users).forEach(nick => {
+          const u = db.users[nick];
+          u.nickname = u.nickname || nick;
+          u.password = u.password || '1234';
+          u.role = u.role || 'PLAYER';
+          u.balance = typeof u.balance === 'number' ? u.balance : 0;
+          u.adminPerSec = typeof u.adminPerSec === 'number' ? u.adminPerSec : 0;
+          u.enhanceLevel = typeof u.enhanceLevel === 'number' ? u.enhanceLevel : 0;
+          u.totalClicks = typeof u.totalClicks === 'number' ? u.totalClicks : 0;
+          u.upgrades = { cursor: 0, grandma: 0, farm: 0, factory: 0, bank: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0, ...(u.upgrades || {}) };
+          u.stocks = { isumart: 0, sihyundia: 0, isijeonja: 0, ...(u.stocks || {}) };
+          u.stockAvgPrices = { isumart: 0, sihyundia: 0, isijeonja: 0, ...(u.stockAvgPrices || {}) };
+          if (!u.dailyMission || u.dailyMission.date !== getTodayDateString()) {
+            u.dailyMission = getDefaultDailyMission();
+          }
+          if (u.ban === undefined) u.ban = null;
+        });
+      }
+
+      localStorage.setItem(PERSISTENT_DB_KEY, JSON.stringify(db));
+      return db;
+    }
 
     function ensureUserDailyMission(user) {
       const today = getTodayDateString();
@@ -971,172 +1009,34 @@
       return user.dailyMission;
     }
 
-    // ==================== SUPABASE 연동 ====================
-    const SUPABASE_URL = 'https://wfckhlhdodtidfpmjiuy.supabase.co';   // 예: https://abcdxyz.supabase.co
-    const SUPABASE_KEY = 'sb_publishable_0VRBMB0LbWzhqPNzaMoixQ_OTQBlj_L';   // anon(public) 또는 publishable 키
-    const sb = SUPABASE_URL.startsWith('https://') ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
-    const CLIENT_ID = Math.random().toString(36).slice(2);
-
-    let appDB = getDefaultDB();
+    let appDB = loadPersistentDB();
     let currentUserNickname = null;
-    let dbReady = false;
-    let lastSaved = { users: {}, settings: '' };
-    let lastPending = new Set();
+    const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('isu_clicker_sync_v1') : null;
 
-    function normalizeUser(nick, u) {
-      const t = getDefaultDB().users['최고관리자'];
-      const m = { ...t, ...u, nickname: nick };
-      m.password = u.password || '1234';
-      m.role = u.role || 'PLAYER';
-      m.upgrades = { ...t.upgrades, ...(u.upgrades || {}) };
-      m.stocks = { ...t.stocks, ...(u.stocks || {}) };
-      m.stockAvgPrices = { ...t.stockAvgPrices, ...(u.stockAvgPrices || {}) };
-      if (!m.dailyMission || m.dailyMission.date !== getTodayDateString()) m.dailyMission = getDefaultDailyMission();
-      if (m.ban === undefined) m.ban = null;
-      return m;
-    }
-
-    function mergeSettings(raw) {
-      const b = getDefaultDB().serverSettings;
-      raw = raw || {};
-      const m = { ...b, ...raw, stocks: { ...b.stocks, ...(raw.stocks || {}) } };
-      Object.keys(b.stocks).forEach(k => { if (!m.stocks[k].basePrice) m.stocks[k].basePrice = b.stocks[k].basePrice; });
-      return m;
-    }
-
-    async function loadFromServer() {
-      const [u, p, st] = await Promise.all([
-        sb.from('users').select('nickname,data'),
-        sb.from('pending_requests').select('nickname,data'),
-        sb.from('server_settings').select('data').eq('id', 1).maybeSingle()
-      ]);
-      const err = u.error || p.error || st.error;
-      if (err) throw err;
-
-      const db = getDefaultDB();
-      db.users = {};
-      (u.data || []).forEach(r => { db.users[r.nickname] = normalizeUser(r.nickname, r.data); });
-      if (!db.users['최고관리자']) db.users['최고관리자'] = getDefaultDB().users['최고관리자'];
-      db.pendingRequests = (p.data || []).map(r => r.data);
-      db.serverSettings = mergeSettings(st.data && st.data.data);
-      appDB = db;
-
-      lastSaved.users = {};
-      (u.data || []).forEach(r => { lastSaved.users[r.nickname] = JSON.stringify(db.users[r.nickname]); });
-      lastSaved.settings = st.data ? JSON.stringify(db.serverSettings) : '';
-      lastPending = new Set(db.pendingRequests.map(r => r.nickname));
-    }
-
-    let flushTimer = null, flushAt = 0, flushing = false;
     function saveDB(broadcast = true) {
-      if (!dbReady) return;
-      const delay = broadcast ? 300 : 3000;
-      const at = Date.now() + delay;
-      if (flushTimer && flushAt <= at) return;
-      clearTimeout(flushTimer);
-      flushAt = at;
-      flushTimer = setTimeout(() => { flushTimer = null; flushSave(); }, delay);
-    }
-
-    async function flushSave() {
-      if (!dbReady) return;
-      if (flushing) { saveDB(); return; }
-      flushing = true;
-      try {
-        // 1) 바뀐 유저만 업로드
-        const rows = [], changed = {};
-        for (const [nick, u] of Object.entries(appDB.users)) {
-          const str = JSON.stringify(u);
-          if (lastSaved.users[nick] !== str) {
-            changed[nick] = str;
-            rows.push({ nickname: nick, data: { ...u, _by: CLIENT_ID }, updated_at: new Date().toISOString() });
-          }
-        }
-        if (rows.length) {
-          const { error } = await sb.from('users').upsert(rows);
-          if (error) throw error;
-          Object.assign(lastSaved.users, changed);
-        }
-        // 2) 서버 설정
-        const sStr = JSON.stringify(appDB.serverSettings);
-        if (lastSaved.settings !== sStr) {
-          const { error } = await sb.from('server_settings').upsert({ id: 1, data: { ...appDB.serverSettings, _by: CLIENT_ID } });
-          if (error) throw error;
-          lastSaved.settings = sStr;
-        }
-        // 3) 회원가입 요청 (추가/삭제 분만)
-        const now = new Set(appDB.pendingRequests.map(r => r.nickname));
-        const removed = [...lastPending].filter(n => !now.has(n));
-        const added = appDB.pendingRequests.filter(r => !lastPending.has(r.nickname));
-        if (removed.length) {
-          const { error } = await sb.from('pending_requests').delete().in('nickname', removed);
-          if (error) throw error;
-        }
-        if (added.length) {
-          const { error } = await sb.from('pending_requests').upsert(added.map(r => ({ nickname: r.nickname, data: r })));
-          if (error) throw error;
-        }
-        lastPending = now;
-      } catch (e) {
-        console.error('Supabase 저장 오류:', e);
-        showToast('서버 저장 실패 (네트워크/설정 확인)', 'error');
-      } finally {
-        flushing = false;
+      if (CLOUD_ON) cloudStamp();
+      localStorage.setItem(PERSISTENT_DB_KEY, JSON.stringify(appDB));
+      if (CLOUD_ON) cloudSchedulePush();
+      if (broadcast && syncChannel) {
+        syncChannel.postMessage({ type: 'DB_UPDATED' });
       }
     }
 
-    function startRealtime() {
-      sb.channel('yisiu-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, pl => {
-          if (pl.eventType === 'DELETE') {
-            delete appDB.users[pl.old.nickname];
-          } else {
-            const r = pl.new;
-            if (!r || !r.data || r.data._by === CLIENT_ID) return;   // 내가 올린 건 무시
-            appDB.users[r.nickname] = normalizeUser(r.nickname, r.data);
-            lastSaved.users[r.nickname] = JSON.stringify(appDB.users[r.nickname]);
-          }
-          if (currentUserNickname) refreshAllViews();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'server_settings' }, pl => {
-          const d = pl.new && pl.new.data;
-          if (!d || d._by === CLIENT_ID) return;
-          appDB.serverSettings = mergeSettings(d);
-          lastSaved.settings = JSON.stringify(appDB.serverSettings);
-          if (currentUserNickname) refreshAllViews();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'pending_requests' }, pl => {
-          if (pl.eventType === 'DELETE') {
-            const n = pl.old.nickname;
-            appDB.pendingRequests = appDB.pendingRequests.filter(x => x.nickname !== n);
-            lastPending.delete(n);
-          } else {
-            const d = pl.new.data;
-            if (!appDB.pendingRequests.some(x => x.nickname === d.nickname)) appDB.pendingRequests.push(d);
-            lastPending.add(d.nickname);
-          }
-          if (currentUserNickname) refreshAllViews();
-        })
-        .subscribe();
+    if (syncChannel) {
+      syncChannel.onmessage = (event) => {
+        if (event.data && event.data.type === 'DB_UPDATED') {
+          appDB = loadPersistentDB();
+          refreshAllViews();
+        }
+      };
     }
 
-    (async function initSupabase() {
-      if (!sb) {
-        alert('코드 상단의 SUPABASE_URL / SUPABASE_KEY 를 본인 프로젝트 값으로 바꿔주세요.');
-        return;
+    window.addEventListener('storage', (e) => {
+      if (e.key === PERSISTENT_DB_KEY) {
+        appDB = loadPersistentDB();
+        refreshAllViews();
       }
-      try {
-        await loadFromServer();
-        startRealtime();
-        dbReady = true;
-        flushSave();   // 서버가 비어 있으면 기본 관리자/설정을 업로드
-      } catch (e) {
-        console.error(e);
-        showToast('Supabase 연결 실패: 키/테이블/RLS 설정을 확인하세요.', 'error');
-      }
-    })();
-
-    document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+    });
 
     function showToast(msg, type = 'info') {
       const container = document.getElementById('toast-container');
@@ -1211,9 +1111,9 @@
       return null;
     }
 
-    function handleLogin(e) {
-      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
+    async function handleLogin(e) {
       e.preventDefault();
+      if (CLOUD_ON) await cloudPull();
       appDB = loadPersistentDB();
       const nick = document.getElementById('login-nickname').value.trim();
       const pass = document.getElementById('login-password').value.trim();
@@ -1246,9 +1146,9 @@
       enterLobby(nick);
     }
 
-    function handleAccountRequest(e) {
-      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
+    async function handleAccountRequest(e) {
       e.preventDefault();
+      if (CLOUD_ON) await cloudPull();
       appDB = loadPersistentDB();
       const nick = document.getElementById('req-nickname').value.trim();
       const pass = document.getElementById('req-password').value.trim();
@@ -1263,12 +1163,17 @@
         return;
       }
 
-      appDB.pendingRequests.push({
+      const newReq = {
         nickname: nick,
         password: pass,
         requestedAt: new Date().toLocaleTimeString('ko-KR')
-      });
+      };
+      appDB.pendingRequests.push(newReq);
       saveDB();
+      if (CLOUD_ON) {
+        try { await cloudPutRequest(newReq); cloudSetStatus(true); }
+        catch (err) { cloudSetStatus(false); showToast('서버 연결이 불안정해요. 잠시 후 다시 요청해 주세요.', 'error'); }
+      }
 
       document.getElementById('req-nickname').value = '';
       document.getElementById('req-password').value = '';
@@ -1287,11 +1192,9 @@
     }
 
     function verifyAdminPassword(e) {
-      if (!dbReady) { e.preventDefault(); showToast('서버 연결 중입니다. 잠시 후 다시 시도하세요.', 'warning'); return; }
       e.preventDefault();
       const inputPass = document.getElementById('admin-secret-input').value.trim();
-      const adminRow = appDB.users['최고관리자'];
-      if (adminRow && adminRow.password && inputPass === adminRow.password) {
+      if (inputPass === MASTER_ADMIN_PASS) {
         closeAdminPasswordModal();
         if (!appDB.users['최고관리자']) {
           appDB.users['최고관리자'] = getDefaultDB().users['최고관리자'];
@@ -1314,6 +1217,14 @@
 
     function handleLogout() {
       currentUserNickname = null;
+      raidInside = false;
+      combo = 0;
+      cupForceEnd();
+      auraKey = '';
+      tikiLayer.classList.add('hidden');
+      ['rank-win', 'rebirth-win', 'aura-win'].forEach(closeWin);
+      closeStocksWindow();
+      closeGambleWindow();
       closeAdminPanel();
       document.getElementById('lobby-screen').classList.add('hidden');
       document.getElementById('auth-screen').classList.remove('hidden');
@@ -1324,7 +1235,7 @@
     // ==================== GAMEPLAY CALCULATIONS ====================
     function getClickPower(user) {
       const base = Math.pow(2, user.enhanceLevel || 0);
-      const mult = appDB.serverSettings.globalMultiplier || 1;
+      const mult = (appDB.serverSettings.globalMultiplier || 1) * getSeasonMult() * getBuffMult(user);
       return base * mult;
     }
 
@@ -1335,7 +1246,7 @@
         upgradePps += count * item.basePps;
       });
       const adminPps = user.adminPerSec || 0;
-      const mult = appDB.serverSettings.globalMultiplier || 1;
+      const mult = (appDB.serverSettings.globalMultiplier || 1) * getSeasonMult() * getBuffMult(user);
       const positivePart = Math.max(0, upgradePps + adminPps) * mult;
       const negativePart = (upgradePps + adminPps) < 0 ? (upgradePps + adminPps) : 0;
       return positivePart + negativePart;
@@ -1350,7 +1261,7 @@
       return Math.max(5, Math.round(92 - currentLevel * 0.85));
     }
 
-    function handleYisiuClick(event) {
+    function handleIsuClick(event) {
       if (!currentUserNickname) return;
       const user = appDB.users[currentUserNickname];
       if (!user) return;
@@ -1360,17 +1271,22 @@
         return;
       }
 
-      const gain = getClickPower(user);
+      const nowMs = Date.now();
+      if (nowMs - comboLast > COMBO_RESET_MS) combo = 0;
+      combo += 1;
+      comboLast = nowMs;
+      const gain = getClickPower(user) * (1 + comboBonusPct() / 100);
       user.balance += gain;
       user.totalClicks = (user.totalClicks || 0) + 1;
 
       const dm = ensureUserDailyMission(user);
       dm.clicks += 1;
-      dm.earnedYisiu += gain;
+      dm.earnedIsu += gain;
+      dealRaidDamage(user, gain);
 
       saveDB();
 
-      const btn = document.getElementById('yisiu-circle-btn');
+      const btn = document.getElementById('isu-circle-btn');
       btn.classList.remove('click-bounce');
       void btn.offsetWidth;
       btn.classList.add('click-bounce');
@@ -1390,6 +1306,9 @@
       updateHeaderAndStats();
       renderUpgradeShop();
       renderDailyMissions();
+      renderRaid();
+      renderCombo();
+      return gain;
     }
 
     // ==================== DAILY MISSIONS ====================
@@ -1407,10 +1326,10 @@
         ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
         : 'px-2 py-1 rounded-lg bg-slate-200 text-slate-600 font-black text-[11px] whitespace-nowrap';
 
-      const currentProgressYisiu = Math.max(user.balance, dm.earnedYisiu);
-      const iDone = currentProgressYisiu >= 100000;
-      document.getElementById('dm-prog-yisiu').innerText = `${formatKoreanNumber(Math.min(100000, currentProgressYisiu))} / 10만 이수`;
-      const iBadge = document.getElementById('dm-status-yisiu');
+      const currentProgressIsu = Math.max(user.balance, dm.earnedIsu);
+      const iDone = currentProgressIsu >= 100000;
+      document.getElementById('dm-prog-isu').innerText = `${formatKoreanNumber(Math.min(100000, currentProgressIsu))} / 10만 이수`;
+      const iBadge = document.getElementById('dm-status-isu');
       iBadge.innerText = iDone ? '완료 ✔' : '진행중';
       iBadge.className = iDone
         ? 'px-2 py-1 rounded-lg bg-emerald-100 text-emerald-700 font-black text-[11px] whitespace-nowrap'
@@ -1455,7 +1374,7 @@
       const dm = ensureUserDailyMission(user);
 
       if (dm.claimed) return;
-      const allComplete = dm.clicks >= 100 && Math.max(user.balance, dm.earnedYisiu) >= 100000 && dm.gambleWon && dm.stockBought;
+      const allComplete = dm.clicks >= 100 && Math.max(user.balance, dm.earnedIsu) >= 100000 && dm.gambleWon && dm.stockBought;
       if (!allComplete) {
         showToast('4가지 일일 미션을 모두 완료해야 합니다.', 'error');
         return;
@@ -1706,16 +1625,16 @@
       if (!currentUserNickname) return;
       const user = appDB.users[currentUserNickname];
       if (!user.stockAvgPrices) {
-        user.stockAvgPrices = { yisiumart: 0, sihyundia: 0, isijeonja: 0 };
+        user.stockAvgPrices = { isumart: 0, sihyundia: 0, isijeonja: 0 };
       }
 
       const styles = {
-        yisiumart: { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)' },
+        isumart: { stroke: '#2563eb', fill: 'rgba(37, 99, 235, 0.12)' },
         sihyundia: { stroke: '#7c3aed', fill: 'rgba(124, 58, 237, 0.12)' },
         isijeonja: { stroke: '#059669', fill: 'rgba(5, 150, 105, 0.12)' }
       };
 
-      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+      ['isumart', 'sihyundia', 'isijeonja'].forEach(k => {
         const st = appDB.serverSettings.stocks[k];
         const owned = (user.stocks && user.stocks[k]) || 0;
         const avgPrice = user.stockAvgPrices[k] || 0;
@@ -1763,7 +1682,7 @@
       if (!currentUserNickname) return;
       const user = appDB.users[currentUserNickname];
       if (!user.stockAvgPrices) {
-        user.stockAvgPrices = { yisiumart: 0, sihyundia: 0, isijeonja: 0 };
+        user.stockAvgPrices = { isumart: 0, sihyundia: 0, isijeonja: 0 };
       }
       const st = appDB.serverSettings.stocks[stockKey];
       const owned = user.stocks[stockKey] || 0;
@@ -2041,7 +1960,7 @@
         user.balance += payout;
         const dm = ensureUserDailyMission(user);
         dm.gambleWon = true;
-        dm.earnedYisiu += payout;
+        dm.earnedIsu += payout;
         resBox.className = 'p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-center text-xs font-black text-emerald-700';
         resBox.innerText = `🎊 [${label}] 총 +${formatKoreanNumber(payout)} 이수 획득!`;
         showToast(`${label}! +${formatKoreanNumber(payout)} 이수!`, 'success');
@@ -2085,26 +2004,11 @@
       }
     }
 
-    function switchRightTab(tab) {
-      const stockPanel = document.getElementById('right-stocks-panel');
-      const gamblePanel = document.getElementById('right-gamble-panel');
-      const stockBtn = document.getElementById('righttab-stocks-btn');
-      const gambleBtn = document.getElementById('righttab-gamble-btn');
-
-      if (tab === 'stocks') {
-        stockPanel.classList.remove('hidden');
-        gamblePanel.classList.add('hidden');
-        stockBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-emerald-600 shadow-sm transition whitespace-nowrap';
-        gambleBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
-        updateStocksUI();
-      } else {
-        stockPanel.classList.add('hidden');
-        gamblePanel.classList.remove('hidden');
-        gambleBtn.className = 'py-2 px-2 text-xs font-black rounded-lg bg-white text-amber-600 shadow-sm transition whitespace-nowrap';
-        stockBtn.className = 'py-2 px-2 text-xs font-black rounded-lg text-slate-600 hover:text-slate-900 transition whitespace-nowrap';
-        drawRouletteWheel(rouletteCurrentDeg);
-      }
-    }
+    function openStocksWindow() { document.getElementById('stocks-modal').classList.remove('hidden'); updateStocksUI(); }
+    function closeStocksWindow() { document.getElementById('stocks-modal').classList.add('hidden'); }
+    function openGambleWindow() { document.getElementById('gamble-modal').classList.remove('hidden'); drawRouletteWheel(rouletteCurrentDeg); }
+    function closeGambleWindow() { document.getElementById('gamble-modal').classList.add('hidden'); }
+    function switchRightTab(tab) { tab === 'stocks' ? openStocksWindow() : openGambleWindow(); }
 
     // ==================== REFRESH LOBBY & HEADER VIEWS ====================
     function updateHeaderAndStats() {
@@ -2143,7 +2047,7 @@
       const noticeBar = document.getElementById('global-notice-bar');
       if (appDB.serverSettings.notice) {
         noticeBar.classList.remove('hidden');
-        document.getElementById('global-notice-text').innerText = appDB.serverSettings.notice;
+        document.getElementById('global-notice-text').innerText = `관리자: ${appDB.serverSettings.notice}`;
       } else {
         noticeBar.classList.add('hidden');
       }
@@ -2171,6 +2075,12 @@
       renderEnhancementPanel();
       renderTransferTargets();
       updateStocksUI();
+      renderSeasonUI();
+      renderRaid();
+      renderLoginReward();
+      renderCupRanking();
+      renderAuraFx();
+      renderOpenWins();
       if (!document.getElementById('admin-panel-modal').classList.contains('hidden')) {
         renderAdminPanel();
       }
@@ -2203,6 +2113,7 @@
       document.getElementById('admin-odds-slider').value = appDB.serverSettings.casinoOdds ?? 50;
       document.getElementById('admin-odds-val').innerText = `${appDB.serverSettings.casinoOdds ?? 50}%`;
 
+      renderAdminSeasonRaid();
       const isSuper = role === 'SUPER_ADMIN';
       const isGeneralOrSuper = role === 'SUPER_ADMIN' || role === 'GENERAL_ADMIN';
 
@@ -2422,19 +2333,22 @@
         adminPerSec: 0,
         enhanceLevel: 0,
         totalClicks: 0,
-        upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
-        stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
-        stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        upgrades: { cursor: 0, grandma: 0, farm: 0, factory: 0, bank: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+        stocks: { isumart: 0, sihyundia: 0, isijeonja: 0 },
+        stockAvgPrices: { isumart: 0, sihyundia: 0, isijeonja: 0 },
         dailyMission: getDefaultDailyMission(),
         ban: null
       };
       appDB.pendingRequests.splice(idx, 1);
+      cloudDeleteRequest(req.nickname);
       saveDB();
       showToast(`${req.nickname} 계정이 생성(승인)되었습니다!`, 'success');
       refreshAllViews();
     }
 
     function rejectAccountRequest(idx) {
+      const rq = appDB.pendingRequests[idx];
+      if (rq) cloudDeleteRequest(rq.nickname);
       appDB.pendingRequests.splice(idx, 1);
       saveDB();
       showToast('요청을 거절했습니다.', 'info');
@@ -2460,9 +2374,9 @@
         adminPerSec: 0,
         enhanceLevel: 0,
         totalClicks: 0,
-        upgrades: { cursor: 0, grandma: 0, factory: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
-        stocks: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
-        stockAvgPrices: { yisiumart: 0, sihyundia: 0, isijeonja: 0 },
+        upgrades: { cursor: 0, grandma: 0, farm: 0, factory: 0, bank: 0, quantum: 0, island: 0, boss: 0, impossible: 0, infinite: 0 },
+        stocks: { isumart: 0, sihyundia: 0, isijeonja: 0 },
+        stockAvgPrices: { isumart: 0, sihyundia: 0, isijeonja: 0 },
         dailyMission: getDefaultDailyMission(),
         ban: null
       };
@@ -2482,7 +2396,7 @@
     }
 
     function triggerGlobalStockEvent(type) {
-      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+      ['isumart', 'sihyundia', 'isijeonja'].forEach(k => {
         const st = appDB.serverSettings.stocks[k];
         if (type === 'surge') {
           st.price = Math.max(10, Math.floor(st.price * 3));
@@ -2533,6 +2447,893 @@
       showToast('전체 계정 데이터가 클립보드에 복사되었습니다!', 'success');
     }
 
+
+    // ==================== SEASONS ====================
+    function getSeasonState() {
+      const st = (appDB.serverSettings && appDB.serverSettings.seasons) || {};
+      const ends = (appDB.serverSettings && appDB.serverSettings.seasonEnds) || {};
+      const now = Date.now();
+      const r = {};
+      Object.keys(SEASONS).forEach(k => r[k] = !!st[k] && !(ends[k] && now >= ends[k]));
+      return r;
+    }
+    function getSeasonMult() {
+      const st = getSeasonState();
+      let sum = 0;
+      Object.keys(SEASONS).forEach(k => { if (st[k]) sum += SEASONS[k].bonus; });
+      return 1 + sum;
+    }
+    function toggleSeason(key) {
+      if (!SEASONS[key]) return;
+      if (!appDB.serverSettings.seasons) appDB.serverSettings.seasons = {};
+      if (!appDB.serverSettings.seasonEnds) appDB.serverSettings.seasonEnds = {};
+      const wasOn = getSeasonState()[key];
+      appDB.serverSettings.seasons[key] = !wasOn;
+      let msg = `${SEASONS[key].label} ${wasOn ? '꺼짐' : '켜짐'}`;
+      if (!wasOn) {
+        const min = Number(document.getElementById('admin-season-minutes').value);
+        if (min > 0) {
+          appDB.serverSettings.seasonEnds[key] = Date.now() + min * 60000;
+          msg += ` (${min}분)`;
+        } else {
+          delete appDB.serverSettings.seasonEnds[key];
+        }
+      } else {
+        delete appDB.serverSettings.seasonEnds[key];
+      }
+      saveDB();
+      showToast(msg, 'success');
+      refreshAllViews();
+    }
+    function clearSeasons() {
+      appDB.serverSettings.seasons = {};
+      appDB.serverSettings.seasonEnds = {};
+      saveDB();
+      showToast('모든 계절이 꺼졌습니다.', 'info');
+      refreshAllViews();
+    }
+
+    let seasonKeyNow = '';
+    function syncSeasonFx() {
+      const st = getSeasonState();
+      const active = Object.keys(SEASONS).filter(k => st[k]);
+      const key = active.join(',');
+      if (key === seasonKeyNow) return;
+      seasonKeyNow = key;
+      const bg = document.getElementById('season-bg');
+      if (!active.length) {
+        bg.classList.add('hidden');
+        document.body.classList.remove('season-on');
+        return;
+      }
+      const stops = [];
+      active.forEach(k => SEASONS[k].colors.forEach(c => stops.push(c)));
+      if (active.length === 1) stops.push(stops[0]);
+      bg.style.backgroundImage = `linear-gradient(135deg, ${stops.join(', ')})`;
+      bg.classList.remove('hidden');
+      document.body.classList.add('season-on');
+    }
+
+    function seasonLeftText(k) {
+      const e = appDB.serverSettings.seasonEnds && appDB.serverSettings.seasonEnds[k];
+      if (!e) return '';
+      const sec = Math.max(0, Math.ceil((e - Date.now()) / 1000));
+      return ` ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    }
+
+    function expireSeasons() {
+      const ends = appDB.serverSettings.seasonEnds || {};
+      let changed = false;
+      Object.keys(ends).forEach(k => {
+        if (Date.now() >= ends[k]) {
+          delete ends[k];
+          if (appDB.serverSettings.seasons) appDB.serverSettings.seasons[k] = false;
+          changed = true;
+        }
+      });
+      if (changed) { saveDB(); showToast('계절 이벤트가 종료되었습니다.', 'info'); }
+    }
+
+    function renderSeasonUI() {
+      syncSeasonFx();
+      const st = getSeasonState();
+      const active = Object.keys(SEASONS).filter(k => st[k]);
+      const pill = document.getElementById('header-season-pill');
+      if (!pill) return;
+      if (active.length) {
+        const pct = Math.round((getSeasonMult() - 1) * 100);
+        pill.classList.remove('hidden');
+        pill.innerText = `${active.map(k => SEASONS[k].icon + SEASONS[k].label + seasonLeftText(k)).join(' ')} +${pct}%`;
+      } else {
+        pill.classList.add('hidden');
+      }
+    }
+
+    function renderAdminSeasonRaid() {
+      const si = document.getElementById('admin-site-input');
+      if (si && document.activeElement !== si) si.value = getSiteUrl();
+      const st = getSeasonState();
+      const list = document.getElementById('admin-season-list');
+      if (list) {
+        list.innerHTML = '';
+        Object.keys(SEASONS).forEach(k => {
+          const b = document.createElement('button');
+          b.onclick = () => toggleSeason(k);
+          b.className = `py-2 text-xs font-black rounded-xl transition ${k === 'chaos' ? 'col-span-2 ' : ''}${st[k] ? 'bg-indigo-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`;
+          b.innerText = `${SEASONS[k].icon} ${SEASONS[k].label} +${Math.round(SEASONS[k].bonus * 100)}% ${st[k] ? 'ON' + seasonLeftText(k) : 'OFF'}`;
+          list.appendChild(b);
+        });
+        document.getElementById('admin-season-total').innerText = `+${Math.round((getSeasonMult() - 1) * 100)}%`;
+      }
+      const raid = getRaid();
+      const rs = document.getElementById('admin-raid-status');
+      if (rs) rs.innerText = raid.active
+        ? `진행중 · HP ${formatKoreanNumber(raid.hp)} / ${formatKoreanNumber(raid.maxHp)}`
+        : '레이드 비활성';
+    }
+
+    // ==================== RAID ====================
+    let raidInside = false;
+    let raidDismissedId = null;
+
+    function getRaid() {
+      const r = (appDB.serverSettings && appDB.serverSettings.raid) || {};
+      return { active: !!r.active, id: r.id || 0, maxHp: r.maxHp || 0, hp: r.hp || 0,
+        participants: r.participants || {}, lastResult: r.lastResult || null };
+    }
+
+    function startRaid() {
+      const user = appDB.users[currentUserNickname];
+      if (!user || user.role === 'PLAYER') return;
+      const raw = String(document.getElementById('admin-raid-hp').value).replace(/,/g, '').trim();
+      const hp = Number(raw);
+      if (!isFinite(hp) || hp <= 0) { showToast('보스 HP를 올바르게 입력하세요.', 'error'); return; }
+      appDB.serverSettings.raid = { active: true, id: Date.now(), maxHp: hp, hp: hp, participants: {}, lastResult: null };
+      saveDB();
+      showToast(`레이드가 활성화되었습니다! (HP ${formatKoreanNumber(hp)})`, 'success');
+      refreshAllViews();
+    }
+
+    function endRaid() {
+      const r = appDB.serverSettings.raid;
+      if (!r || !r.active) { showToast('진행중인 레이드가 없습니다.', 'info'); return; }
+      r.active = false;
+      r.lastResult = { id: r.id, defeated: false };
+      saveDB();
+      showToast('레이드를 종료했습니다.', 'info');
+      refreshAllViews();
+    }
+
+    function enterRaid() { raidInside = true; renderRaid(); }
+    function declineRaid() { raidDismissedId = getRaid().id; renderRaid(); }
+    function leaveRaid() { raidInside = false; raidDismissedId = getRaid().id; renderRaid(); }
+
+    function dealRaidDamage(user, dmg) {
+      if (!raidInside || !(dmg > 0)) return;
+      const r = appDB.serverSettings.raid;
+      if (!r || !r.active) return;
+      const real = Math.min(dmg, r.hp);
+      r.hp -= real;
+      r.participants = r.participants || {};
+      r.participants[currentUserNickname] = (r.participants[currentUserNickname] || 0) + real;
+      if (r.hp <= 0) {
+        r.hp = 0;
+        r.active = false;
+        r.lastResult = { id: r.id, defeated: true, finisher: currentUserNickname };
+      }
+    }
+
+    function handleRaidClick(event) {
+      const raid = getRaid();
+      if (!raid.active) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const gain = handleIsuClick(event) || 0;
+      const zone = document.getElementById('raid-float-zone');
+      const f = document.createElement('div');
+      f.className = 'floating-text text-lg';
+      f.style.cssText = `position:absolute;left:${Math.random() * 60 + 20}%;top:-90px;color:#fde68a;pointer-events:none;`;
+      f.innerText = `-${formatKoreanNumber(gain)}`;
+      zone.appendChild(f);
+      setTimeout(() => f.remove(), 800);
+    }
+
+    function renderRaid() {
+      const prompt = document.getElementById('raid-prompt');
+      const over = document.getElementById('raid-overlay');
+      const enterBtn = document.getElementById('raid-enter-btn');
+      if (!prompt) return;
+      const user = currentUserNickname ? appDB.users[currentUserNickname] : null;
+      if (!user || user.role !== 'PLAYER') {
+        prompt.classList.add('hidden'); over.classList.add('hidden'); enterBtn.classList.add('hidden');
+        return;
+      }
+      const raid = getRaid();
+      const showPrompt = raid.active && !raidInside && raidDismissedId !== raid.id;
+      prompt.classList.toggle('hidden', !showPrompt);
+      enterBtn.classList.toggle('hidden', !(raid.active && !raidInside));
+      if (showPrompt) {
+        document.getElementById('raid-prompt-hp').innerText = `보스 HP ${formatKoreanNumber(raid.hp)} / ${formatKoreanNumber(raid.maxHp)}`;
+      }
+      if (!raidInside) { over.classList.add('hidden'); return; }
+      over.classList.remove('hidden');
+
+      const pct = raid.maxHp > 0 ? Math.max(0, Math.min(100, raid.hp / raid.maxHp * 100)) : 0;
+      document.getElementById('raid-hp-bar').style.width = `${pct}%`;
+      document.getElementById('raid-hp-text').innerText = `${formatKoreanNumber(raid.hp)} / ${formatKoreanNumber(raid.maxHp)}`;
+
+      const banner = document.getElementById('raid-banner');
+      const btn = document.getElementById('raid-click-btn');
+      if (raid.active) {
+        banner.innerText = '이수를 클릭하세요!';
+        btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+      } else {
+        const res = raid.lastResult;
+        banner.innerText = res && res.defeated ? `🎉 보스 처치! 마무리: ${res.finisher}` : '레이드가 종료되었습니다.';
+        btn.style.opacity = '0.4'; btn.style.pointerEvents = 'none';
+      }
+
+      const mult = (appDB.serverSettings.globalMultiplier || 1) * getSeasonMult() * getBuffMult(user);
+      document.getElementById('raid-click-dmg').innerText = formatKoreanNumber(getClickPower(user));
+      let total = 0;
+      let html = '';
+      UPGRADE_CATALOG.forEach(item => {
+        const n = (user.upgrades && user.upgrades[item.id]) || 0;
+        if (!n) return;
+        const d = n * item.basePps * mult;
+        total += d;
+        html += `<div class="flex justify-between"><span>${item.icon} ${item.name} ×${n}</span><b>+${formatKoreanNumber(d)}/초</b></div>`;
+      });
+      document.getElementById('raid-attackers').innerHTML = html || '<div class="text-white/60">보유한 자동 공격 없음</div>';
+      document.getElementById('raid-pps-dmg').innerText = formatKoreanNumber(total);
+      document.getElementById('raid-my-dmg').innerText = formatKoreanNumber(raid.participants[currentUserNickname] || 0);
+
+      const rank = Object.entries(raid.participants).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      document.getElementById('raid-ranking').innerHTML = rank.length
+        ? rank.map(([n, d], i) => `<div class="flex justify-between ${n === currentUserNickname ? 'text-amber-300 font-black' : ''}"><span>${i + 1}. ${n}</span><b>${formatKoreanNumber(d)}</b></div>`).join('')
+        : '<div class="text-white/60">아직 공격한 사람이 없습니다</div>';
+    }
+
+
+    // ==================== DAILY LOGIN REWARD ====================
+    function getYesterdayString() {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    function getLoginRewardInfo(user) {
+      const r = user.loginReward || { lastDate: '', streak: 0 };
+      const today = getTodayDateString();
+      const claimed = r.lastDate === today;
+      let day;
+      if (claimed) day = r.streak;
+      else if (r.lastDate === getYesterdayString()) day = r.streak + 1;
+      else day = 1;
+      return { claimed, day };
+    }
+    function renderLoginReward() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const info = getLoginRewardInfo(user);
+      const btn = document.getElementById('login-reward-btn');
+      document.getElementById('login-reward-streak').innerText = `${info.day}일차`;
+      document.getElementById('login-reward-preview').innerText = formatKoreanNumber(Math.floor(user.balance * 0.75));
+      if (info.claimed) {
+        btn.disabled = true;
+        btn.innerText = `✅ ${info.day}일차 보상 수령 완료`;
+        btn.className = 'w-full py-3 bg-slate-200 text-slate-500 font-black rounded-xl text-xs cursor-not-allowed whitespace-nowrap';
+      } else {
+        btn.disabled = false;
+        btn.innerText = `${info.day}일차 보상 받기`;
+        btn.className = 'w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl text-xs transition whitespace-nowrap';
+      }
+    }
+    function claimLoginReward() {
+      if (!currentUserNickname) return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const info = getLoginRewardInfo(user);
+      if (info.claimed) { showToast('오늘 보상은 이미 받았어요.', 'info'); return; }
+      const reward = Math.floor(user.balance * 0.75);
+      user.balance += reward;
+      user.loginReward = { lastDate: getTodayDateString(), streak: info.day };
+      saveDB();
+      showToast(`${info.day}일차 보상! ${formatKoreanNumber(reward)} 이수 획득`, 'success');
+      refreshAllViews();
+    }
+
+
+    // ==================== COMBO ====================
+    let combo = 0;
+    let comboLast = 0;
+    const COMBO_RESET_MS = 6000;
+    const COMBO_MAX_BONUS = 200;
+    function comboBonusPct() { return Math.min(combo, COMBO_MAX_BONUS); }
+    function renderCombo() {
+      if (combo > 0 && Date.now() - comboLast > COMBO_RESET_MS) combo = 0;
+      const left = combo > 0 ? Math.max(0, 1 - (Date.now() - comboLast) / COMBO_RESET_MS) : 0;
+      const pct = comboBonusPct();
+      const txt = `🔥 ${combo} 콤보`;
+      const bonus = combo > 0 ? `+${pct}%${pct >= COMBO_MAX_BONUS ? ' (MAX)' : ''}` : '+0% (최대 +200%)';
+      [['combo-count', 'combo-bonus', 'combo-bar'], ['raid-combo-count', 'raid-combo-bonus', 'raid-combo-bar']].forEach(([a, b, c]) => {
+        const ea = document.getElementById(a);
+        if (!ea) return;
+        ea.innerText = txt;
+        document.getElementById(b).innerText = bonus;
+        document.getElementById(c).style.width = `${left * 100}%`;
+      });
+    }
+    setInterval(renderCombo, 100);
+
+    // ==================== CLOUD SYNC (다른 기기 연동) ====================
+    function cloudKey(nick) { return encodeURIComponent(nick).replace(/\./g, '%2E'); }
+    function cloudUserSig(u) { const c = { ...u }; delete c.updatedAt; return JSON.stringify(c); }
+    function cloudSetStatus(ok) {
+      const el = document.getElementById('cloud-status');
+      if (!el || !CLOUD_ON) return;
+      el.classList.remove('hidden');
+      el.innerText = ok ? '☁️ 연동됨' : '☁️ 오프라인';
+      el.className = `px-2.5 py-1 rounded-full text-xs font-black whitespace-nowrap border ${ok ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-rose-50 text-rose-700 border-rose-300'}`;
+    }
+    async function cloudReq(method, path, body) {
+      const url = `${CLOUD_DB_URL.replace(/\/$/, '')}/isu${path ? '/' + path : ''}.json`;
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      if (!res.ok) throw new Error('cloud ' + res.status);
+      return res.json();
+    }
+    function cloudInitSnap() {
+      Object.keys(appDB.users).forEach(n => { cloud.snap[n] = cloudUserSig(appDB.users[n]); });
+    }
+    function cloudStamp() {
+      Object.keys(appDB.users).forEach(n => {
+        const u = appDB.users[n];
+        const sig = cloudUserSig(u);
+        if (cloud.snap[n] !== sig) {
+          cloud.snap[n] = sig;
+          u.updatedAt = Date.now();
+          cloud.dirty.add(n);
+        }
+      });
+    }
+    function cloudSchedulePush(delay = 1200) {
+      if (!CLOUD_ON || cloud.timer) return;
+      cloud.timer = setTimeout(cloudPush, delay);
+    }
+    async function cloudPush() {
+      cloud.timer = null;
+      const names = Array.from(cloud.dirty);
+      try {
+        for (const n of names) {
+          const u = appDB.users[n];
+          if (u) await cloudReq('PUT', `users/${cloudKey(n)}`, u);
+          cloud.dirty.delete(n);
+        }
+        cloudSetStatus(true);
+      } catch (e) {
+        cloudSetStatus(false);
+        cloudSchedulePush(5000);
+      }
+    }
+    async function cloudPutRequest(req) {
+      cloud.unconfirmed.add(req.nickname);
+      await cloudReq('PUT', `requests/${cloudKey(req.nickname)}`, req);
+      cloud.unconfirmed.delete(req.nickname);
+    }
+    function cloudDeleteRequest(nick) {
+      if (!CLOUD_ON) return;
+      cloud.deleted[nick] = Date.now();
+      cloudReq('DELETE', `requests/${cloudKey(nick)}`).catch(() => {});
+    }
+    async function cloudPull() {
+      if (!CLOUD_ON || cloud.pulling) return;
+      cloud.pulling = true;
+      try {
+        const data = (await cloudReq('GET', '')) || {};
+        let changed = false;
+        const remoteUsers = data.users || {};
+        Object.keys(remoteUsers).forEach(k => {
+          const rec = remoteUsers[k];
+          if (!rec || !rec.nickname) return;
+          const local = appDB.users[rec.nickname];
+          if (!local || (rec.updatedAt || 0) > (local.updatedAt || 0)) {
+            appDB.users[rec.nickname] = rec;
+            cloud.snap[rec.nickname] = cloudUserSig(rec);
+            changed = true;
+          }
+        });
+        // 회원가입 요청 병합
+        const now = Date.now();
+        const remoteReqs = Object.values(data.requests || {}).filter(r => r && r.nickname && !appDB.users[r.nickname]
+          && !(cloud.deleted[r.nickname] && now - cloud.deleted[r.nickname] < 15000));
+        const keep = appDB.pendingRequests.filter(r => cloud.unconfirmed.has(r.nickname) && !remoteReqs.some(x => x.nickname === r.nickname));
+        const merged = remoteReqs.concat(keep);
+        const oldNames = appDB.pendingRequests.map(r => r.nickname).sort().join('|');
+        const newNames = merged.map(r => r.nickname).sort().join('|');
+        if (oldNames !== newNames) {
+          const added = merged.filter(r => !appDB.pendingRequests.some(x => x.nickname === r.nickname));
+          appDB.pendingRequests = merged;
+          changed = true;
+          const me = currentUserNickname && appDB.users[currentUserNickname];
+          if (me && me.role !== 'PLAYER' && added.length) {
+            showToast(`새 회원가입 요청: ${added.map(r => r.nickname).join(', ')}`, 'info');
+          }
+        }
+        if (changed) {
+          localStorage.setItem(PERSISTENT_DB_KEY, JSON.stringify(appDB));
+          if (syncChannel) syncChannel.postMessage({ type: 'DB_UPDATED' });
+          if (currentUserNickname) refreshAllViews();
+        }
+        cloudSetStatus(true);
+      } catch (e) {
+        cloudSetStatus(false);
+      } finally {
+        cloud.pulling = false;
+      }
+    }
+    if (CLOUD_ON) {
+      cloudInitSnap();
+      cloudSetStatus(false);
+      cloudPull();
+      setInterval(cloudPull, 3000);
+    }
+
+
+    // ==================== LOGOUT CONFIRM / SITE ====================
+    function openLogoutConfirm() { document.getElementById('logout-confirm').classList.remove('hidden'); }
+    function closeLogoutConfirm() { document.getElementById('logout-confirm').classList.add('hidden'); }
+    function confirmLogout() { closeLogoutConfirm(); handleLogout(); }
+    function getSiteUrl() { return ((appDB.serverSettings && appDB.serverSettings.siteUrl) || 'sihyeonclicker2.vercel.app').trim(); }
+    function goToSite() {
+      let u = getSiteUrl();
+      if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+      window.location.href = u;
+    }
+    function saveSiteUrl() {
+      const v = document.getElementById('admin-site-input').value.trim();
+      if (!v) { showToast('사이트 주소를 입력하세요.', 'error'); return; }
+      appDB.serverSettings.siteUrl = v;
+      saveDB();
+      showToast('사이트 주소가 저장되었습니다.', 'success');
+    }
+
+    // ==================== CUP MINI GAME ====================
+    const CUP_LEVELS = [2, 3, 4, 5, 8, 10, 15, 20];
+    const CUP_REWARDS = [500000, 300000, 100000];
+    const cupG = { phase: 'idle', level: 0, bet: 0, wins: 0, ball: 0, cups: [], cols: 2, token: 0 };
+    const cupSleep = ms => new Promise(r => setTimeout(r, ms));
+    function cupSpeedMs() { return Math.max(110, 520 - cupG.wins * 60); }
+    function cupPot() { return cupG.bet * Math.pow(2, cupG.wins); }
+
+    function getCupRanking() {
+      return Object.values(appDB.users)
+        .filter(u => u.role === 'PLAYER' && (u.cupBest || 0) > 0)
+        .sort((a, b) => (b.cupBest - a.cupBest) || ((a.cupBestAt || 0) - (b.cupBestAt || 0)));
+    }
+    function renderCupRanking() {
+      const rank = getCupRanking();
+      const box = document.getElementById('cup-ranking');
+      if (box) {
+        const medals = ['🥇', '🥈', '🥉'];
+        box.innerHTML = rank.length ? rank.slice(0, 10).map((u, i) =>
+          `<div class="flex justify-between px-2.5 py-1.5 rounded-lg ${u.nickname === currentUserNickname ? 'bg-violet-100 font-black' : 'bg-slate-50'}"><span>${medals[i] || (i + 1) + '.'} ${u.nickname}</span><b>${u.cupBest}회</b></div>`
+        ).join('') : '<div class="text-slate-400 text-center py-2">아직 기록이 없어요</div>';
+      }
+      const ab = document.getElementById('admin-cup-ranking');
+      if (ab) {
+        ab.innerHTML = rank.length ? rank.slice(0, 3).map((u, i) =>
+          `<div class="flex justify-between"><span>${i + 1}등 ${u.nickname}</span><span>${u.cupBest}회 → ${formatKoreanNumber(CUP_REWARDS[i])}</span></div>`
+        ).join('') : '<div class="text-slate-400">기록 없음</div>';
+      }
+      const me = currentUserNickname && appDB.users[currentUserNickname];
+      const mb = document.getElementById('cup-my-best');
+      if (mb && me) mb.innerText = me.cupBest || 0;
+    }
+    function payCupRankingRewards() {
+      const rank = getCupRanking().slice(0, 3);
+      if (!rank.length) { showToast('지급할 랭킹 기록이 없습니다.', 'error'); return; }
+      rank.forEach((u, i) => { u.balance += CUP_REWARDS[i]; });
+      saveDB();
+      showToast(`랭킹 보상 지급! ${rank.map((u, i) => `${i + 1}등 ${u.nickname} +${formatKoreanNumber(CUP_REWARDS[i])}`).join(' / ')}`, 'success');
+      refreshAllViews();
+    }
+    function resetCupRanking() {
+      Object.values(appDB.users).forEach(u => { u.cupBest = 0; u.cupBestAt = 0; });
+      saveDB();
+      showToast('미니게임 랭킹을 초기화했습니다.', 'info');
+      refreshAllViews();
+    }
+
+    function openCupWindow() {
+      document.getElementById('cup-modal').classList.remove('hidden');
+      renderCupRanking(); renderCupButtons();
+    }
+    function closeCupWindow() {
+      if (['show', 'shuffle', 'pick', 'result'].includes(cupG.phase)) { showToast('게임 진행 중에는 닫을 수 없어요!', 'warning'); return; }
+      if (cupG.phase === 'decide') cupCashout();
+      document.getElementById('cup-modal').classList.add('hidden');
+    }
+    function cupForceEnd() {
+      if (cupG.phase === 'decide') cupCashout();
+      cupG.token++; cupG.phase = 'idle';
+      document.getElementById('cup-modal').classList.add('hidden');
+    }
+    function cupBetAll() {
+      const u = appDB.users[currentUserNickname];
+      if (u) document.getElementById('cup-bet-input').value = Math.floor(u.balance);
+    }
+    function cupSetStatus(t) { document.getElementById('cup-status').innerText = t; }
+    function renderCupButtons() {
+      const ph = cupG.phase;
+      document.getElementById('cup-start-btn').classList.toggle('hidden', ph !== 'idle');
+      document.getElementById('cup-bet-row').classList.toggle('hidden', ph !== 'idle');
+      const dec = ph === 'decide';
+      document.getElementById('cup-continue-btn').classList.toggle('hidden', !dec);
+      document.getElementById('cup-cashout-btn').classList.toggle('hidden', !dec);
+      document.getElementById('cup-continue-btn').innerText = `계속하기 (×2 · 컵 ${CUP_LEVELS[Math.min(cupG.level + 1, CUP_LEVELS.length - 1)]}개)`;
+      document.getElementById('cup-cashout-btn').innerText = `이수 받기 (+${formatKoreanNumber(cupPot())})`;
+      document.getElementById('cup-pot').innerText = ph === 'idle' ? '0' : formatKoreanNumber(cupPot());
+    }
+
+    function cupLayout(n) {
+      const cols = n <= 5 ? n : (n === 8 ? 4 : 5);
+      const rows = Math.ceil(n / cols);
+      return { cols, rows };
+    }
+    function cupSlotPos(slot) {
+      const col = slot % cupG.cols, row = Math.floor(slot / cupG.cols);
+      return [col * 70, 50 + row * 86];
+    }
+    function cupApplyPositions(dur) {
+      cupG.cups.forEach(c => {
+        const [x, y] = cupSlotPos(c.slot);
+        c.el.style.transitionDuration = `${dur}ms`;
+        c.el.style.transform = `translate(${x}px, ${y}px)`;
+      });
+    }
+    function cupBuild(n) {
+      const { cols, rows } = cupLayout(n);
+      cupG.cols = cols;
+      const stage = document.getElementById('cup-stage');
+      stage.innerHTML = '';
+      stage.style.width = `${cols * 70}px`;
+      stage.style.height = `${50 + rows * 86}px`;
+      cupG.cups = Array.from({ length: n }, (_, i) => {
+        const el = document.createElement('div');
+        el.className = 'cup';
+        el.innerHTML = (i === cupG.ball ? '<div class="ball"></div>' : '') + '<div class="cup-body"></div>';
+        el.onclick = () => cupPick(i);
+        stage.appendChild(el);
+        return { id: i, slot: i, el };
+      });
+      cupApplyPositions(0);
+    }
+
+    function startCupGame() {
+      if (cupG.phase !== 'idle') return;
+      const user = appDB.users[currentUserNickname];
+      if (!user) return;
+      const bet = Math.floor(Number(document.getElementById('cup-bet-input').value));
+      if (!(bet >= 1)) { showToast('걸 이수를 입력하세요.', 'error'); return; }
+      if (bet > user.balance) { showToast('보유 이수가 부족합니다.', 'error'); return; }
+      user.balance -= bet;
+      saveDB();
+      updateHeaderAndStats();
+      cupG.token++;
+      Object.assign(cupG, { phase: 'show', level: 0, bet, wins: 0 });
+      renderCupButtons();
+      cupRound(cupG.token);
+    }
+
+    async function cupRound(tk) {
+      const n = CUP_LEVELS[cupG.level];
+      cupG.phase = 'show';
+      cupG.ball = Math.floor(Math.random() * n);
+      cupBuild(n);
+      renderCupButtons();
+      cupSetStatus(`${cupG.level + 1}단계 · 컵 ${n}개 — 공을 잘 보세요!`);
+      await cupSleep(600); if (tk !== cupG.token) return;
+      const bc = cupG.cups[cupG.ball];
+      bc.el.classList.add('lift');
+      await cupSleep(1200); if (tk !== cupG.token) return;
+      bc.el.classList.remove('lift');
+      await cupSleep(450); if (tk !== cupG.token) return;
+
+      cupG.phase = 'shuffle';
+      cupSetStatus('섞는 중... 🌀');
+      const dur = cupSpeedMs();
+      const swaps = Math.min(42, 8 + n * 2);
+      for (let i = 0; i < swaps; i++) {
+        const pairs = n >= 8 ? 2 : 1;
+        const used = new Set();
+        for (let p = 0; p < pairs; p++) {
+          let a, b, guard = 0;
+          do { a = Math.floor(Math.random() * n); b = Math.floor(Math.random() * n); guard++; }
+          while ((a === b || used.has(a) || used.has(b)) && guard < 30);
+          if (a === b) continue;
+          used.add(a); used.add(b);
+          const ca = cupG.cups.find(c => c.slot === a), cb = cupG.cups.find(c => c.slot === b);
+          ca.slot = b; cb.slot = a;
+        }
+        cupApplyPositions(dur);
+        await cupSleep(dur + 15); if (tk !== cupG.token) return;
+      }
+      cupG.phase = 'pick';
+      cupG.cups.forEach(c => c.el.classList.add('pickable'));
+      cupSetStatus('공이 있는 컵을 고르세요! 👆');
+    }
+
+    async function cupPick(id) {
+      if (cupG.phase !== 'pick') return;
+      const tk = cupG.token;
+      cupG.phase = 'result';
+      cupG.cups.forEach(c => c.el.classList.remove('pickable'));
+      const user = appDB.users[currentUserNickname];
+      cupG.cups[id].el.classList.add('lift');
+      const ok = id === cupG.ball;
+      if (!ok) cupG.cups[cupG.ball].el.classList.add('lift');
+      await cupSleep(900); if (tk !== cupG.token) return;
+      if (ok) {
+        cupG.wins += 1;
+        if (user && cupG.wins > (user.cupBest || 0)) { user.cupBest = cupG.wins; user.cupBestAt = Date.now(); }
+        saveDB();
+        renderCupRanking();
+        if (cupG.level >= CUP_LEVELS.length - 1) {
+          cupSetStatus(`👑 전체 클리어! ${cupG.wins}연속 성공!`);
+          cupCashout();
+        } else {
+          cupG.phase = 'decide';
+          cupSetStatus(`🎉 성공! ${cupG.wins}연속 · 계속하면 상금이 2배!`);
+          renderCupButtons();
+        }
+      } else {
+        cupSetStatus(`💥 실패... 건 이수 ${formatKoreanNumber(cupG.bet)}를 잃었어요. (${cupG.wins}연속 성공 기록)`);
+        cupG.phase = 'idle';
+        renderCupButtons();
+        renderCupRanking();
+        refreshAllViews();
+      }
+    }
+
+    function cupContinue() {
+      if (cupG.phase !== 'decide') return;
+      cupG.level += 1;
+      cupG.phase = 'show';
+      renderCupButtons();
+      cupRound(cupG.token);
+    }
+
+    function cupCashout() {
+      if (cupG.phase !== 'decide' && !(cupG.phase === 'result' && cupG.level >= CUP_LEVELS.length - 1)) return;
+      const user = appDB.users[currentUserNickname];
+      const pot = cupPot();
+      if (user) { user.balance += pot; saveDB(); }
+      showToast(`+${formatKoreanNumber(pot)} 이수를 받았습니다!`, 'success');
+      cupSetStatus(`💰 ${cupG.wins}연속 성공! ${formatKoreanNumber(pot)} 이수 획득`);
+      cupG.phase = 'idle';
+      renderCupButtons();
+      refreshAllViews();
+    }
+
+
+    // ==================== REBIRTH / AURA / SKIN / RANKING ====================
+    function curUser() { return currentUserNickname ? appDB.users[currentUserNickname] : null; }
+    function fmtMult(m) { return m >= 10000 ? formatKoreanNumber(m) : String(m); }
+    function getBuffMult(user) {
+      const r = user.rebirth || 0;
+      let m = r > 0 ? REBIRTH_MULTS[r - 1] : 1;
+      const a = AURAS.find(x => x.id === user.auraEquipped && user.auras && user.auras[x.id]);
+      if (a) m *= a.mult;
+      const sk = user.skinEquipped || 0;
+      if (sk >= 1 && sk <= r) m *= 1 + SKINS[sk - 1].pct / 100;
+      return m;
+    }
+
+    function makeWin(id, title, bodyId) {
+      const d = document.createElement('div');
+      d.id = id;
+      d.className = 'hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4';
+      d.style.zIndex = 55;
+      d.innerHTML = `<div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden"><div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0"><h3 class="text-sm font-black">${title}</h3><button onclick="closeWin('${id}')" class="px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-black">닫기 ✕</button></div><div id="${bodyId}" class="p-4 overflow-y-auto space-y-3"></div></div>`;
+      document.body.appendChild(d);
+    }
+    makeWin('rank-win', '🏆 랭킹', 'rank-body');
+    makeWin('rebirth-win', '🔄 환생', 'rebirth-body');
+    makeWin('aura-win', '✨ 아우라', 'aura-body');
+    const tikiLayer = document.createElement('div');
+    tikiLayer.id = 'tiki-layer';
+    tikiLayer.className = 'hidden';
+    tikiLayer.style.cssText = 'position:fixed;inset:0;z-index:30;pointer-events:none;box-shadow:inset 0 0 120px 30px rgba(251,146,60,.4),inset 0 0 240px 60px rgba(20,184,166,.28);';
+    document.body.appendChild(tikiLayer);
+
+    function openWin(id) { document.getElementById(id).classList.remove('hidden'); renderWin(id); }
+    function closeWin(id) { document.getElementById(id).classList.add('hidden'); }
+    function openRankWin() { openWin('rank-win'); }
+    function openRebirthWin() { openWin('rebirth-win'); }
+    function openAuraWin() { openWin('aura-win'); }
+    function renderWin(id) {
+      if (id === 'rank-win') renderRankings();
+      else if (id === 'rebirth-win') renderRebirth();
+      else if (id === 'aura-win') renderAuras();
+    }
+    function renderOpenWins() {
+      ['rank-win', 'rebirth-win', 'aura-win'].forEach(id => {
+        const e = document.getElementById(id);
+        if (e && !e.classList.contains('hidden')) renderWin(id);
+      });
+    }
+
+    // ----- ranking
+    let rankTab = 'balance';
+    const RANK_TABS = {
+      balance: ['💰 보유 이수', u => u.balance, v => formatKoreanNumber(v)],
+      rebirth: ['🔄 환생', u => u.rebirth || 0, v => `${v}환생`],
+      pps: ['⚡ 초당 이수', u => getPerSecondIncome(u), v => `${formatKoreanNumber(v)}/초`],
+      cup: ['🥤 미니게임', u => u.cupBest || 0, v => `${v}연속`]
+    };
+    function setRankTab(t) { rankTab = t; renderRankings(); }
+    function renderRankings() {
+      const body = document.getElementById('rank-body');
+      if (!body) return;
+      const [, getV, fmt] = RANK_TABS[rankTab];
+      const players = Object.values(appDB.users).filter(u => u.role === 'PLAYER')
+        .map(u => ({ n: u.nickname, v: getV(u) }))
+        .sort((a, b) => (b.v - a.v) || a.n.localeCompare(b.n)).slice(0, 10);
+      const medals = ['🥇', '🥈', '🥉'];
+      body.innerHTML = `<div class="grid grid-cols-4 gap-1.5">${Object.keys(RANK_TABS).map(k =>
+        `<button onclick="setRankTab('${k}')" class="py-2 rounded-lg text-[11px] font-black ${k === rankTab ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700'}">${RANK_TABS[k][0]}</button>`).join('')}</div>` +
+        `<div class="space-y-1 text-xs">${players.length ? players.map((p, i) =>
+          `<div class="flex justify-between px-3 py-2 rounded-lg ${p.n === currentUserNickname ? 'bg-sky-100 font-black' : 'bg-slate-50'}"><span>${medals[i] || (i + 1) + '.'} ${p.n}</span><b>${fmt(p.v)}</b></div>`).join('') : '<div class="text-center text-slate-400 py-4">플레이어가 없어요</div>'}</div>`;
+    }
+
+    // ----- rebirth
+    function renderRebirth() {
+      const u = curUser(); const body = document.getElementById('rebirth-body');
+      if (!u || !body) return;
+      const r = u.rebirth || 0;
+      let h = `<div class="text-center space-y-1"><div class="text-3xl">🔄</div><div class="text-sm font-black">현재 ${r}/20 환생 · 배수 ×${fmtMult(r ? REBIRTH_MULTS[r - 1] : 1)}</div></div>`;
+      if (r < 20) {
+        const cost = REBIRTH_COSTS[r], ok = u.balance >= cost;
+        h += `<div class="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs font-bold text-slate-700 space-y-1">
+          <div>다음 환생: <b>${r + 1}환생</b> → 배수 <b>×${fmtMult(REBIRTH_MULTS[r])}</b></div>
+          <div>필요 이수: <b class="${ok ? 'text-emerald-600' : 'text-rose-600'}">${formatKoreanNumber(cost)}</b> (보유 ${formatKoreanNumber(u.balance)})</div>
+          <div class="text-[11px] text-slate-500">환생하면 이수·업그레이드·강화가 초기화돼요. 아우라와 스킨은 유지돼요.</div></div>
+          <button onclick="doRebirth()" ${ok ? '' : 'disabled'} class="w-full py-3 rounded-xl text-sm font-black ${ok ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}">🔄 환생하기</button>`;
+      } else {
+        h += '<div class="text-center text-sm font-black text-amber-600">👑 최고 환생(20환생) 달성!</div>';
+      }
+      h += `<div><div class="text-xs font-black mb-1.5">🎨 환생 스킨 (환생 단계마다 해금 · 수익 +%)</div><div class="grid grid-cols-4 gap-1.5">${SKINS.map((sk, i) => {
+        const n = i + 1, un = n <= r, eq = (u.skinEquipped || 0) === n;
+        return `<button onclick="equipSkin(${n})" class="rounded-xl p-1.5 text-center border-2 ${eq ? 'bg-amber-50' : 'bg-slate-50'} ${un ? '' : 'opacity-45'}" style="border-color:${eq ? sk.color : '#e2e8f0'}"><div class="text-xl">${un ? sk.icon : '🔒'}</div><div class="text-[10px] font-black truncate">${sk.name}</div><div class="text-[10px] font-bold" style="color:${sk.color}">+${sk.pct}%</div><div class="text-[9px] text-slate-400">${n}환생</div></button>`;
+      }).join('')}</div></div>`;
+      h += `<details class="text-[11px]"><summary class="font-black cursor-pointer">📋 환생 표 보기</summary><div class="mt-1 space-y-0.5">${REBIRTH_COSTS.map((c, i) =>
+        `<div class="flex justify-between px-2 py-1 rounded ${i < r ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-50'}"><span>${i + 1}환생</span><span>${formatKoreanNumber(c)} → ×${fmtMult(REBIRTH_MULTS[i])}</span></div>`).join('')}</div></details>`;
+      body.innerHTML = h;
+    }
+    function doRebirth() {
+      const u = curUser(); if (!u) return;
+      const r = u.rebirth || 0;
+      if (r >= 20) { showToast('이미 최고 환생이에요!', 'info'); return; }
+      const cost = REBIRTH_COSTS[r];
+      if (u.balance < cost) { showToast('이수가 부족합니다.', 'error'); return; }
+      if (!window.confirm(`${r + 1}환생을 하시겠습니까?\n이수·업그레이드·강화가 초기화됩니다.`)) return;
+      u.balance = 0;
+      u.enhanceLevel = 0;
+      u.upgrades = Object.fromEntries(UPGRADE_CATALOG.map(i => [i.id, 0]));
+      u.rebirth = r + 1;
+      saveDB();
+      showToast(`🔄 ${u.rebirth}환생 완료! 배수 ×${fmtMult(REBIRTH_MULTS[u.rebirth - 1])} · ${SKINS[u.rebirth - 1].name} 스킨 해금!`, 'success');
+      refreshAllViews();
+    }
+    function equipSkin(n) {
+      const u = curUser(); if (!u) return;
+      if (n > (u.rebirth || 0)) { showToast(`${n}환생을 하면 열려요!`, 'warning'); return; }
+      u.skinEquipped = (u.skinEquipped === n) ? 0 : n;
+      saveDB();
+      refreshAllViews();
+    }
+    function adminSetRebirth() {
+      const me = curUser();
+      if (!me || me.role === 'PLAYER') return;
+      const target = appDB.users[document.getElementById('admin-user-select').value];
+      if (!target) return;
+      const lv = parseInt(document.getElementById('admin-rebirth-select').value, 10) || 0;
+      target.rebirth = lv;
+      if ((target.skinEquipped || 0) > lv) target.skinEquipped = 0;
+      saveDB();
+      showToast(`${target.nickname} 님을 ${lv}환생으로 설정했습니다.`, 'success');
+      refreshAllViews();
+    }
+
+    // ----- aura
+    function renderAuras() {
+      const u = curUser(); const body = document.getElementById('aura-body');
+      if (!u || !body) return;
+      body.innerHTML = `<div class="text-[11px] text-slate-500 font-bold">구매한 아우라 중 하나를 장착하면 이펙트가 보이고 배수가 적용돼요.</div>` + AURAS.map(a => {
+        const owned = !!(u.auras && u.auras[a.id]), eq = u.auraEquipped === a.id && owned;
+        const btn = !owned
+          ? `<button onclick="buyAura('${a.id}')" class="px-3 py-2 rounded-lg text-xs font-black ${u.balance >= a.price ? 'bg-fuchsia-600 text-white' : 'bg-slate-200 text-slate-500'}">${formatKoreanNumber(a.price)} 구매</button>`
+          : `<button onclick="equipAura('${eq ? '' : a.id}')" class="px-3 py-2 rounded-lg text-xs font-black ${eq ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-white'}">${eq ? '장착중 ✓' : '장착'}</button>`;
+        return `<div class="flex items-center gap-3 p-3 rounded-xl border-2 bg-slate-50" style="border-color:${eq ? a.color : '#e2e8f0'}"><div class="text-3xl">${a.icon}</div><div class="flex-1 min-w-0"><div class="text-sm font-black">${a.name}</div><div class="text-[11px] text-slate-500 font-bold">${a.desc}</div><div class="text-[11px] font-black" style="color:${a.color}">수익 ×${fmtMult(a.mult)}</div></div>${btn}</div>`;
+      }).join('');
+    }
+    function buyAura(id) {
+      const u = curUser(); const a = AURAS.find(x => x.id === id);
+      if (!u || !a) return;
+      if (u.auras && u.auras[id]) return;
+      if (u.balance < a.price) { showToast('이수가 부족합니다.', 'error'); return; }
+      u.balance -= a.price;
+      u.auras = u.auras || {};
+      u.auras[id] = true;
+      u.auraEquipped = id;
+      saveDB();
+      showToast(`${a.icon} ${a.name} 구매 완료! (수익 ×${fmtMult(a.mult)})`, 'success');
+      refreshAllViews();
+    }
+    function equipAura(id) {
+      const u = curUser(); if (!u) return;
+      u.auraEquipped = id;
+      saveDB();
+      refreshAllViews();
+    }
+
+    let auraKey = '';
+    function renderAuraFx() {
+      const layer = document.getElementById('aura-layer');
+      const btn = document.getElementById('isu-circle-btn');
+      const u = curUser();
+      if (!layer || !btn) return;
+      const id = (u && u.auras && u.auras[u.auraEquipped]) ? u.auraEquipped : '';
+      const sk = (u && (u.skinEquipped || 0) >= 1 && u.skinEquipped <= (u.rebirth || 0)) ? u.skinEquipped : 0;
+      const key = id + '|' + sk;
+      if (key === auraKey) return;
+      auraKey = key;
+      tikiLayer.innerHTML = '';
+      tikiLayer.classList.toggle('hidden', id !== 'tiki');
+      let html = '';
+      const a = AURAS.find(x => x.id === id);
+      if (a) {
+        html += `<div style="position:absolute;inset:-8px;border-radius:50%;box-shadow:0 0 20px 6px ${a.color},0 0 46px 16px ${a.color}66;animation:auraPulse 1.5s ease-in-out infinite;"></div>`;
+        if (id === 'purple') html += `<div style="position:absolute;inset:-22px;border-radius:50%;background:conic-gradient(from 0deg,#a855f7,#6366f1,#d946ef,#a855f7);filter:blur(14px);opacity:.7;animation:auraSpin 4s linear infinite;"></div>`;
+      }
+      if (sk) {
+        const s2 = SKINS[sk - 1];
+        btn.style.borderColor = s2.color;
+        btn.style.boxShadow = `0 0 16px 3px ${s2.color}99`;
+        html += `<div style="position:absolute;right:-6px;bottom:-6px;width:38px;height:38px;border-radius:50%;background:#fff;border:3px solid ${s2.color};display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(0,0,0,.25);">${s2.icon}</div>`;
+      } else {
+        btn.style.borderColor = '';
+        btn.style.boxShadow = '';
+      }
+      layer.innerHTML = html;
+    }
+    function spawnAuraP() {
+      if (!currentUserNickname || document.hidden) return;
+      const id = auraKey.split('|')[0];
+      if (!id) return;
+      if (id === 'tiki') {
+        if (tikiLayer.children.length > 22) return;
+        const sp = document.createElement('span');
+        sp.className = 'aura-p';
+        sp.innerText = ['🗿', '🌺', '🍍', '🔥'][Math.floor(Math.random() * 4)];
+        const left = Math.random() < 0.5 ? 1 + Math.random() * 12 : 87 + Math.random() * 12;
+        sp.style.cssText = `left:${left}%;bottom:-5%;font-size:${24 + Math.random() * 26}px;animation:tikiFloat ${4 + Math.random() * 3}s linear forwards;`;
+        tikiLayer.appendChild(sp);
+        setTimeout(() => sp.remove(), 7500);
+        return;
+      }
+      const layer = document.getElementById('aura-layer');
+      const set = { electric: ['⚡'], fire: ['🔥'], water: ['💦', '💧'], stock: ['📈', '📉', '💹'] }[id];
+      if (!set || !layer || layer.children.length > 16) return;
+      const ang = Math.random() * Math.PI * 2, rad = 72 + Math.random() * 22;
+      const sp = document.createElement('span');
+      sp.className = 'aura-p';
+      sp.innerText = set[Math.floor(Math.random() * set.length)];
+      sp.style.cssText = `left:${88 + Math.cos(ang) * rad - 10}px;top:${88 + Math.sin(ang) * rad - 10}px;font-size:${16 + Math.random() * 12}px;animation:${id === 'electric' ? 'auraFlash .55s' : 'auraRise 1.1s'} ease-out forwards;`;
+      layer.appendChild(sp);
+      setTimeout(() => sp.remove(), 1200);
+    }
+    setInterval(spawnAuraP, 230);
+
     // ==================== REAL-TIME LOOPS ====================
     window.addEventListener('resize', () => {
       if (currentUserNickname) updateStocksUI();
@@ -2544,23 +3345,38 @@
       if (!user) return;
 
       const pps = getPerSecondIncome(user);
-      if (pps !== 0) {
-        user.balance = Math.max(0, user.balance + pps);
-        if (pps > 0) {
-          ensureUserDailyMission(user).earnedYisiu += pps;
+      const nowT = Date.now();
+      if (!user.lastActive) user.lastActive = nowT;
+      let secs = Math.floor((nowT - user.lastActive) / 1000);
+      if (secs >= 1) {
+        const offline = secs > 5;
+        if (secs > 86400) { secs = 86400; user.lastActive = nowT; }
+        else user.lastActive += secs * 1000;
+        if (pps !== 0) {
+          const gain = pps * secs;
+          user.balance = Math.max(0, user.balance + gain);
+          if (gain > 0) {
+            ensureUserDailyMission(user).earnedIsu += gain;
+            if (!offline) dealRaidDamage(user, gain);
+          }
+          if (offline && gain > 0) {
+            showToast(`💤 오프라인 수익 +${formatKoreanNumber(gain)} 이수 (${formatDurationKorean(secs)} 동안)`, 'success');
+          }
         }
         saveDB(false);
         updateHeaderAndStats();
         renderDailyMissions();
         renderUpgradeShop();
       }
+      expireSeasons();
+      renderSeasonUI();
+      renderRaid();
+      renderOpenWins();
     }, 1000);
 
     setInterval(() => {
       if (!currentUserNickname) return;
-      if (Date.now() - (appDB.serverSettings.stockTickAt || 0) < 3500) return;
-      appDB.serverSettings.stockTickAt = Date.now();
-      ['yisiumart', 'sihyundia', 'isijeonja'].forEach(k => {
+      ['isumart', 'sihyundia', 'isijeonja'].forEach(k => {
         const st = appDB.serverSettings.stocks[k];
         const delta = (Math.random() - 0.48) * 0.08;
         st.price = Math.max(10, Math.round(st.price * (1 + delta)));
@@ -2571,5 +3387,285 @@
       updateStocksUI();
     }, 4000);
   </script>
+
+  <div id="stocks-modal" class="hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4" style="z-index:55;">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <h3 class="text-sm font-black">📈 실시간 주식</h3>
+        <button onclick="closeStocksWindow()" class="px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-black">닫기 ✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex flex-col">
+          <!-- RIGHT TAB 1: 3 Real-Time Stocks (이수마트, 시현디아, 이시전자) -->
+          <div id="right-stocks-panel" class="flex-1 flex flex-col justify-between space-y-2.5 overflow-y-auto pr-1">
+            <!-- Stock 1: 이수마트 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이수마트</span>
+                    <span id="stock-owned-isumart" class="text-xs font-bold text-blue-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-isumart" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-isumart" class="font-black text-sm text-slate-900 whitespace-nowrap">1,000 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-isumart" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-isumart" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-isumart" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('isumart', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('isumart', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('isumart', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('isumart', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('isumart', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+
+            <!-- Stock 2: 시현디아 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">시현디아</span>
+                    <span id="stock-owned-sihyundia" class="text-xs font-bold text-purple-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-sihyundia" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-sihyundia" class="font-black text-sm text-slate-900 whitespace-nowrap">5,000 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-sihyundia" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-sihyundia" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-sihyundia" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('sihyundia', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('sihyundia', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('sihyundia', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('sihyundia', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('sihyundia', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+
+            <!-- Stock 3: 이시전자 -->
+            <div class="p-3 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="flex items-center justify-between mb-1">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-black text-sm text-slate-900 whitespace-nowrap">이시전자</span>
+                    <span id="stock-owned-isijeonja" class="text-xs font-bold text-emerald-600 whitespace-nowrap">보유: 0주</span>
+                  </div>
+                  <div id="stock-roi-isijeonja" class="text-[11px] font-bold text-slate-500">평단가: - (미보유)</div>
+                </div>
+                <div class="text-right">
+                  <div id="stock-price-isijeonja" class="font-black text-sm text-slate-900 whitespace-nowrap">1만 이수</div>
+                  <div class="flex items-center justify-end gap-1 mt-0.5">
+                    <span id="stock-diff-isijeonja" class="px-1.5 py-0.5 rounded bg-slate-200 text-[10px] font-black text-slate-700 whitespace-nowrap">0.00%</span>
+                    <span id="stock-base-diff-isijeonja" class="text-[10px] font-bold text-slate-500 whitespace-nowrap">(기준 0.0%)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="h-16 w-full bg-white rounded-lg p-1 border border-slate-200 mb-2">
+                <canvas id="canvas-stock-isijeonja" class="w-full h-full block"></canvas>
+              </div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick="tradeStock('isijeonja', 'buy', 1)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매수</button>
+                <button onclick="tradeStock('isijeonja', 'buy', 10)" class="py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">10주</button>
+                <button onclick="tradeStock('isijeonja', 'buyAll', 0)" class="py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매수</button>
+                <button onclick="tradeStock('isijeonja', 'sell', 1)" class="py-1.5 bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">1주 매도</button>
+                <button onclick="tradeStock('isijeonja', 'sellAll', 0)" class="py-1.5 bg-rose-700 hover:bg-rose-800 text-white text-[11px] font-bold rounded-lg whitespace-nowrap">전량매도</button>
+              </div>
+            </div>
+          </div>
+
+
+      </div>
+    </div>
+  </div>
+
+  <div id="gamble-modal" class="hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4" style="z-index:55;">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <h3 class="text-sm font-black">🎰 이수 도박장</h3>
+        <button onclick="closeGambleWindow()" class="px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-black">닫기 ✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto flex flex-col">
+          <!-- RIGHT TAB 2: Gambling Arena (행운의 룰렛 + 슬롯머신) -->
+          <div id="right-gamble-panel" class="flex-1 flex flex-col justify-between space-y-3 overflow-y-auto pr-1">
+            <!-- Mode Switcher & Odds -->
+            <div class="flex items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <div class="flex gap-1.5">
+                <button id="gamble-mode-roulette-btn" onclick="switchGambleMode('roulette')"
+                  class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-black shadow-sm transition whitespace-nowrap">
+                  🎡 행운의 룰렛
+                </button>
+                <button id="gamble-mode-slot-btn" onclick="switchGambleMode('slot')"
+                  class="px-3 py-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 text-xs font-black transition whitespace-nowrap">
+                  🎰 슬롯머신
+                </button>
+              </div>
+              <div class="text-right whitespace-nowrap">
+                <span class="text-[10px] font-bold text-slate-500 block">설정 승률</span>
+                <span id="gamble-odds-display" class="text-sm font-black text-amber-600">50%</span>
+              </div>
+            </div>
+
+            <!-- Mode A: Spinning Roulette Canvas -->
+            <div id="gamble-roulette-view" class="bg-slate-50 rounded-2xl p-3 border border-slate-200 flex flex-col items-center justify-center relative">
+              <div class="relative w-44 h-44 flex items-center justify-center">
+                <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[18px] border-t-rose-600 drop-shadow"></div>
+                <canvas id="roulette-canvas" width="220" height="220" class="w-44 h-44 rounded-full shadow-lg"></canvas>
+              </div>
+              <div class="text-[11px] text-slate-500 font-bold mt-2">
+                2배 · 3배 · 5배 · JACKPOT(10배) 찬스!
+              </div>
+            </div>
+
+            <!-- Mode B: 3-Reel Slot Machine -->
+            <div id="gamble-slot-view" class="hidden bg-slate-900 rounded-2xl p-4 border border-slate-800 text-center space-y-2.5">
+              <div class="text-[11px] font-black text-amber-400 tracking-wider">ISU 3-REEL SLOTS</div>
+              <div class="grid grid-cols-3 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <div id="slot-reel-1" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">💎</div>
+                <div id="slot-reel-2" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">🍀</div>
+                <div id="slot-reel-3" class="h-16 bg-white rounded-xl flex items-center justify-center text-3xl shadow-inner font-black">👑</div>
+              </div>
+              <div class="text-[11px] text-slate-400 font-bold">
+                3개 일치 시 <span class="text-amber-400">2배 ~ 7배</span> 잭팟 당첨!
+              </div>
+            </div>
+
+            <!-- Bet Input -->
+            <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+              <label class="block text-xs font-bold text-slate-600">베팅 금액 (예: 1000, 1만, 100조)</label>
+              <input type="text" id="gamble-bet-input" placeholder="베팅할 이수 입력"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold outline-none focus:border-amber-500" />
+              <div class="grid grid-cols-3 gap-1.5">
+                <button type="button" onclick="setGambleBetRatio(0.25)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">25%</button>
+                <button type="button" onclick="setGambleBetRatio(0.5)" class="py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg">50%</button>
+                <button type="button" onclick="setGambleBetRatio(1)" class="py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 text-xs font-black rounded-lg">올인</button>
+              </div>
+            </div>
+
+            <div id="gamble-result-box" class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs font-bold text-slate-600">
+              룰렛 또는 슬롯을 돌려 행운을 시험해보세요!
+            </div>
+
+            <button id="gamble-spin-btn" onclick="handleGamble()"
+              class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl shadow-md transition text-sm">
+              🎡 룰렛 돌리기
+            </button>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+
+  <!-- LOGOUT CONFIRM -->
+  <div id="logout-confirm" class="hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4" style="z-index:90;">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center space-y-3">
+      <div class="text-3xl">🚪</div>
+      <h3 class="text-base font-black text-slate-900">로그아웃 하시겠습니까?</h3>
+      <p class="text-[11px] text-slate-500 font-bold">로그아웃해도 오프라인에서 이수는 계속 벌려요!</p>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="confirmLogout()" class="py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-black rounded-xl text-sm">예</button>
+        <button onclick="closeLogoutConfirm()" class="py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-black rounded-xl text-sm">아니요</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUP GAME -->
+  <div id="cup-modal" class="hidden fixed inset-0 bg-slate-900/60 flex items-center justify-center p-4" style="z-index:55;">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[94vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3 bg-slate-900 text-white flex items-center justify-between shrink-0">
+        <h3 class="text-sm font-black">🥤 복불복 컵 게임</h3>
+        <button onclick="closeCupWindow()" class="px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-black">닫기 ✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-3">
+        <div class="flex items-center justify-between text-xs font-black">
+          <span>내 최고 연속 성공 <b id="cup-my-best" class="text-violet-600">0</b>회</span>
+          <span>상금 <b id="cup-pot" class="text-emerald-600">0</b> 이수</span>
+        </div>
+        <div id="cup-bet-row" class="flex gap-2">
+          <input id="cup-bet-input" type="number" min="1" placeholder="걸 이수" class="flex-1 px-3 py-2 border border-slate-300 rounded-xl text-sm font-bold" />
+          <button onclick="cupBetAll()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-black whitespace-nowrap">전부</button>
+        </div>
+        <div id="cup-status" class="text-center text-sm font-black text-slate-700 min-h-[1.5rem]">이수를 걸고 게임을 시작하세요!</div>
+        <div class="bg-slate-50 rounded-xl border border-slate-200 py-3 overflow-x-auto">
+          <div id="cup-stage" class="relative mx-auto"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="cup-start-btn" onclick="startCupGame()" class="col-span-2 py-3 bg-violet-600 hover:bg-violet-700 text-white font-black rounded-xl text-sm">게임 시작</button>
+          <button id="cup-continue-btn" onclick="cupContinue()" class="hidden py-3 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl text-sm">계속하기 (×2)</button>
+          <button id="cup-cashout-btn" onclick="cupCashout()" class="hidden py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-sm">이수 받기</button>
+        </div>
+        <div class="pt-1">
+          <div class="text-xs font-black text-slate-900 mb-1.5">🏆 성공 횟수 랭킹</div>
+          <div id="cup-ranking" class="space-y-1 text-xs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAID ENTRY PROMPT -->
+  <div id="raid-prompt" class="hidden fixed inset-0 bg-slate-900/70 flex items-center justify-center p-4" style="z-index:70;">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm text-center space-y-3">
+      <div class="text-4xl">👹</div>
+      <h3 class="text-lg font-black text-slate-900">레이드 입장하세요!</h3>
+      <p id="raid-prompt-hp" class="text-xs font-bold text-slate-500"></p>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="enterRaid()" class="py-3 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-xl text-sm">예</button>
+        <button onclick="declineRaid()" class="py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-black rounded-xl text-sm">아니요</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAID BATTLE -->
+  <div id="raid-overlay" class="hidden fixed inset-0 overflow-y-auto" style="z-index:60;background:linear-gradient(160deg,#1e1b4b,#4c1d95 55%,#7f1d1d);">
+    <div class="max-w-3xl mx-auto p-4 text-white flex flex-col items-center gap-3 min-h-full">
+      <div class="w-full flex items-center justify-between">
+        <h2 class="text-lg font-black">👹 레이드 보스</h2>
+        <button onclick="leaveRaid()" class="px-3 py-1.5 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-black">나가기</button>
+      </div>
+      <div class="w-full">
+        <div class="flex justify-between text-xs font-black mb-1"><span>HP</span><span id="raid-hp-text">0 / 0</span></div>
+        <div class="w-full h-5 rounded-full bg-black/40 overflow-hidden border border-white/20">
+          <div id="raid-hp-bar" class="h-full bg-gradient-to-r from-rose-500 to-amber-400 transition-all" style="width:100%"></div>
+        </div>
+      </div>
+      <div id="raid-banner" class="text-xl font-black text-amber-300 text-center">이수를 클릭하세요!</div>
+      <div class="w-full max-w-xs">
+        <div class="flex justify-between text-xs font-black mb-1"><span id="raid-combo-count">🔥 0 콤보</span><span id="raid-combo-bonus">+0%</span></div>
+        <div class="h-2 rounded-full bg-black/40 overflow-hidden"><div id="raid-combo-bar" class="h-full bg-gradient-to-r from-amber-400 to-rose-500" style="width:0%"></div></div>
+      </div>
+      <button id="raid-click-btn" onclick="handleRaidClick(event)" class="relative w-52 h-52 rounded-full overflow-hidden border-4 border-rose-400 shadow-2xl focus:outline-none active:scale-95 transition-transform">
+        <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAGQAZADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD5vXnimkYbpTIXPmEU9yc1JZYVlkBBOKhmjweOaZkoc1Mj7xQFittOaevFTMgJyadGFA5HFDBIbGxb5ccVctrfL5HTFRR4z8o5q4oMafKPrUXLSEdwH21XmhaQ5HSpVjySxOT2qVV9adxWM7PlkrtyTSRWzOCxBCjk1otaljkCn3aCKJbdOe7EfyouHKY7Zd8AcCl8vFWo4gpwRRJESemDTuLlKjQlhkCoXbnaOK0njCxEA9ByazWBY5FAmhEJDirVz+8Uf3gKrwr+9G7oOTTvP3zMDQIYRTlk2/KehpTgHng011yMigQrR8blqEA5JxUsblRg1Iu11OMA0AQqdtK4zzS7MHmnheMGmMrDrkVKPnXB60148E4o4jAJJzSEMUlGwfzqUn24prqHXcKWM7hg9aBj422nnoaePkPHeo+lSK3GDQMsWjASc4x70uqWwhcOv3X5FRRABzk1fulF3bgd1HFJMDLQ+lSbiD7VEFaNtpqTqKYDHX5gy9M1JLGHXIFCHaDnpU6bZE4/Ki4jOAIOK29OISMOehrJdCspDCrlpIZCEzgL2qJFLsbssBktgwB2A/nWXcQg57V0NnMJNMEJ71lXMRUsOPpSTsOxkhSpzk4ouYsoGU89cVZeMYxioZ0wBweKskrxhvKYqMt6GpokEZDDG7uKIQrgkHBAqO3lLTfOCADxQBcPzQFj94elSM5aHaRwBSXC7Yvl/i6Uk42Qxg+nNAFRUKuSvStCzuvJI8z7p61TQqOlPVgx2k5zQBtz2xlh86Lay9eD0qtq6R3VtBdhMNGAG/Co7KSS3+6TtzyD3q/eWKtZO0LEgjeFoA4iFtknXg1ZmHII6VRQ5X3q4jb0APWqEK3NOjfZwBULsQ3FPSkUiwfm56UoB6CkQbhipUHIGOlJlJXJraDPJ61djt2kHJpluuen4Vo269CRWTkbRgQCxwKSS2Crx1zWlK6KvFQxxG4cZAWNeSaXMNxKS/uxk9T0pkqllz3rRuYEJDjoO1M8tWGRyQKdxcpiYAkGRzSykE+1XpbPc/IxVOeFUYjJ+gppkNWK8kg2MvrWcyFWODxV1x1JqApuBrRbGT3GQ4JOPSoGRkcMD3qdMoHqIH1piJJDvXJ61Gj9jUyYZSDUPRsYoBomKjZmo3BQYFOUnAqRgrjpQBErhupqTB/CmvHHxjOaWMOh+ZgE9xz+FAWFSMMfm4Heo5omJ3KAVxxU87JKm1BtXv70xmbyxHngUCsVo2KEqfu0p+RwexpJVZORToJPNGxuD60AiUAMMjrSqMg02MbWx1qxEmXwehoGQ81etJfMQoSAapkeXIVbp61JE/luWHfjNIBlwhEh9TTV4GDVmVTNGGA5FVlOTjvQAowcjNS2vzNtNQuuDzxU0ThXB/SgCO/VvO3HjHAp1oQsytnFWrmyluUEq7VUdWY4FV7ePcARzipkCOk0mXMjLjORwKbcxZLcEE0WGYzA8ZAduKuyWsjvuc8/zrO9jVK5jtbZByeahMG1W3Dr0roItNWVyX444rK1hktQiMvLtgVUZXE42MR0ZJCccGh0Vh1IatCe3ZANwzxVGZMNuH41dyLF2Ei6sW9YTzTSBJFGzE7SOtLor7xcoVyhUAn3ptz+6RUH3RwKEwKZVtxCHIFLExVjnqKWdPLmVk4DCpUnkK8MMDqCKLgaliomVew96si8Edyio3yA4NULW5dyOMVLdxmKWNwMAkUwOMBI4q1bMR1quy85FTQkjrVMSJpU3GmJwcVOMMtMVOQaQyeAHrVqNN3J7VFAuQKuwpxWcpG0UXbWNVjBYde9WfvfdPFVYUdxtB4q7HCQuAKyZuhpG5gvU1bjRcBc8d8Ui27AbqVY9hypyTUsqxO0cTRlSvbis1T5L7TjjtV/a7naOKq3dr5Sl8ZNCZLRDcbp1BhXk9TWabZw58z73pW1aMCmRioL9wQSF59RVqREo6GBfqsagL171UG5eq1fe3edWboM4FOe0baBjqOtbJmHLczyu4Z9agZQh5rRlh8tewNVXTcvIp3E1YiAyNw6VIY0kAJOPeowxTKjpUsY8xNu3OKCRDBtjMg5AqFfc1YlJRQnYc4qBlDDPSmImUpt4QMfekCeYS0jAEdBUC7kbO41MSD7n2pAIYyeVBNM3gPhhT0kaM01wJe2DQArASKcc1XKbGzUo3RdOaczpIvTBpgAzIAQDkVYh++uetUopCkmM8VdjO6QEHrQA64jVuRzUK9KsqoL1FOu1j6UgASEEY4FQXEfkyCQdG5NSAbuKGjLrtYjPYUANyJVDVLCij5tu7FQwYU7WHFWEBVm2njrQBP9okkhMcpDDt7UzTlysicECnEZAPrSabGRetH/AHumPSlIaNK1dzJGqgkL39K6nYtykZUjcR0Fc2kRglBVhjvXR6HMu4krnjGT0FctR2N4RuXhproOn8Oa5i9iF5rEaMBthGT9TXpTWwKK7PkFegHQVxOl6cb7W7yNAdzMAtTCdlc0cGVNQ0lkiMrDIPTFc5fQeWpA616Nf2LRRPHOwHl8H61w+oQbnYjlQeDW0JXRlUVirYK6RFBgK/XjrUEreY7qOVFWI5PLkUA9uaZYRLcXMmBnc2MVqmZlSUE446ChUIXJHBqeRNty1u3ysDgZ70r/ACJsYcjmncBluzAkjOAa3NoubNQf4eQaxLVsT7c9a6GBVWAhjt7AChEnAMuDmnoC3QUNg8GljypwelWSiaMYPNP2kjIFGAe2amjHAyKktElswJ5q/GM9KzQvzCtO0O4YrGR0RLsC4X3q/atuOOapwRlTzWhFHgZrJs3ii065QAYFNijVW5waeilwAafLblYy4B4qbmlhzwqWDJVa8RmUgrxirtuweMHuKfPGGiJI5oE0YVlGA5X0NXLqALEwYA56VGkBilLL3q0VZsEj8KfNqS43Rjm28uPAUetVygHLVsTQGRiRxVdrUKpUjNacxnymLdW4lwQOlUZICnBFblxbOmMdDVSa3MikAZNXGRjKJiSwZ5Wp4IzBH5zjGOB7mphbMX2njmluE3EKPujir5iLFK4iaQCQVXzjgnmtEkFQpHIqpPAD82aohoiz2pBweKTLKMHmnLGSAQwoJY/HmNx1pkimNuRVjOzG3g0hO/hhkUAV1bHXmkKq3K8ZqfytvIHBqGVCPmH5UAV5Y2Vtwq1ZS5XaRg1Es2SFYU4I0bDHQ0AX0bB5p7x71xmouNgKnmrUY8yFiOooGVI4dzlPTmq/mFpCuMEVqW6JHFPM3LAbQPrWVIdkwcfjQIkjIaUZwf61K3yXGB90iqk0ZjmR1PymrTuJE9COhoBFpoz5QZe1P05tt0rjnIxzRbv59tt/iAptqfLZiCAynipYF+ceXKC7EFuxrc0e5iJ2EYPQ1k3EJmliebjcoINWowtocD7zHJPrXNVWh0UnZnpejxJNpss24vsBAB+lc/oFvI2vCcN5YYsMY64rU8LXyyae8BHHJNSaTDi4uGUYMEm9T6g1x8z2O7l0uReL7QQzxAKVEnDY71wmqQ/vdicD2r0LxHK98IyCGJ/SuX1jTFtWIByR1PbNdVGRz1o6HGzWvlyNICBtTvVTS323JfkAkEGtLXYGt7J3UEs3GPasvTCDs8xtuetdSehyJF69w9+W+8ByDTJtkrfN19adeSEyDH3FGFqs7hx6EUBYikRo2zgjae1dRbQ+ZDbShvkYgH0xWEpWVdknIbvXQ6Jtk8OmPcTJDNtHHUdqbZL0PPnUBiaeqg1JJHuTJGKIB8uKu4kPVcGp4xmkVN3FSIm3pUs0ihGQjnHFWtPcq2D07VGASMGlXKcjtWUjaBvRAMAR1q7bMCdp61nafOHg3HgjjFW4SN+4VizqijUhUbvUVO/zcVVtpBkZNWshulZmlhkMW1j1qy8WYH+lJtKYJHWn3DhLZ27UXBxMhgUKORkZx9a0lgzGGIHIrPuI3VLYHs/Nb0UeI1z6U2wS0MzyAxIqKe2J4ArSe2CHKnioyGB6UKRLic5dW8qjkZUVV2bTkcZrppow6Mu0GsufT5STtStFIzlBGDfhEiaRR81VIAZFH5mtuTTgzYlX61RntPs8rKowp6GtFK5g4MpTWuPmDZqAw4BOcitIW5dSPXvTTarGME1akQ4GM6qxwBURh8onbzV+5ttjZUZpixH+KruZcpVkOIwTwTTdxA9qn1OIBE2DGPSqSyEfKaZJbhkH3T0NE9s+AUAIqqQ3UGrFreBWCSDFAFSVDnkYanI7Mu01pz20UqmRCCcVnKpR/mHFAE8L7av2ByxU8BqovAQwIPBqzaPscD0qWMtzwlFJIIU8ZrHu4yhFdDPD9oiDAkgVm3druTPrwaaYmZshYojuPl6A1ZiwFJIzkVXlRlg8sZODTrQsW2ZyQOlMC1ZyeXIU7GtEW0SnzFP3uetZa48wE9q14kLxAoMioYC6hcTXC2/ljiLjAp8zyIwy+89vaoLqZ4oPLQkP3IFaiW0Vzp0M6IQx4cn6VnJFxudDoV6LKHzXODgfL61024I8VwjHypRtO2vOYGlZhhiQOPwruPDl7H9n+yXL5B+7nsa4aqsz0aUro1RbEzJlcovIrK8TRrCYwRlSMsR6npWpdzyRZBJRcggj0o1qxie1KRnKyFSXfnmlTnZiqK6OD1rTCbXJHbIrjUt2hucY4zXp+swNDbCN8MoGBtrgp13TMypwDg8V3QndHHOHKV1xM5QHHpmo57WSM5280rW7JJuQkd81qWUxdf3wDdiT3rS4rGOjjKkn7p5FdNp7+UpIXYkhyAa566hAu5FVSB/OrrzMdPj8tiHjfJPtQZyMDGVxUaAo/pVtIC5wFyaSWHaMjHFaCsSwJuBzVgQgYIHPeq1kCz5z3rRVN0gXpWcmbxjoRmEuvy/lULDYcEHNX1gZZMn8KjuYCx6VNyrWGWDhZNvrzW1GMHrXPRq0dyik9Tit+I/Oo7VlM6abuXoAA2T0rRiTdg9qzkIBFX4i5GB0rBmqLSQGV8k/KO1R6rGTFFax8NK6j8O9WoZFSP5eTUUQ3XDzuclRgUFtaGfrAC3FjFHwWmC4HpXQtCq4C9hiudZTd65bdxAS7D69K6hhuYsO9KQoFQxEnpUbRjOMVcIwcYprRjrjmi5TRQ8nLfdpWTA+6DVgA7+lKyHriqUmiOW5ly2ayZLAVQutMjdSTz6V0JhyKrSwdu1XGepEqZx4sZfMZckAdKZLYMPet7UIGiw6jI9BUcaiWPdgVpzGXIc7Jb7M7lzWXchkbIGQf0rrpLPzB6fhWReaftOMce4rSMjCcDG2eau1hVK4syMsnbritWSFoCc9DTBgKQRke9aXMnEx0U9hzTXQE8jBq7c24V9yHHrUIw/DLzTuZjreVk+UnNWGKS/Kow1U3PlyhSMGpiN4DL1FAD2DRDntTo8ecrr91hTUfem1zQdgXIyMelJga1pK8Mgwcqfyq9cWqXKRlmVdxwVHQe9V7RQlpHO5GDSllnUmNsj+8tTcRj6qEs9T+yKQy4+8O9UIj5N1nsSa6LWohqdvFLtVJYARlRjd9a5fDFsMeQatbAXLdh9oMbHIY45roNCUkSwNjeMgfT1rkpXMFwWQZX3ro9MnDSRTK3DD5qmQDrqJkk+Y/WtjSNRhNjJYkHc3RjWZqgZZiQDSaPC32oc/KTkGs5dzSG9jXdGtJgCvB9K34VdUjlh78isTUowChJyHGR65FdJ4bsJJrHZIxeNuY29q5qiurnZRetixHeZjAkDyEfwntTl1AzEwMHIJBHsRVs6Y8MhhdN0RwROvLJ7Y71l3+kXqSC4sXF5GeSFGCPrWCSN2a2rCGS34+YhR2rh722G8uq8dCK3LTxE2GhmtyGXghxzVa6KT7sAYJzgDpW9NtaGU0nqjlZINr4xxUkunyEKUJXPQir11EF7dKlspAV2N24BNb8xhy30MebTr0gN5Xmgdx1qS2gZ1ngkTB25H1rZmnMKHaWJzwRVSMG5uWV3VGAxtPAP41cWYzWpg2q/MHH51P9iV1b3FLpsPJU54GK0xCIlHpVNmihc5uONoZyg4GetaMfZhzjrVq/03zgJIV+YDJqtbDKYP3gcEelRJ3Kii799FccUOglAI/GpY4Q6DvS+VtBwMVKZq4mLfxHeGXgqeDV6xuGaMbzz0p2oQBYVbHzsf0qCICVVRRgg9fWiSuiYOzNuzJZue9asQONo/Gsew3qwVhjFbVsBkeneuZnVEtINkeB96iZfJtMn7x5NSIm+QKO3JqSWPzmCgfKOtItoraJYBd9y4+eRs/Stmo4Y1ijCjFSAZNSykrDNh3ZpxXAp+MU1juwMUAQCLDFuhpwjzUxjpQlO4yBkG3gc1A8WRnFXiqEYpDGNvX8KSdgaMi4tcoQ2KyWh8mYRj+LpXQXSMchR3rL1W2K2u8D94Dwa0TMHGzImtmPWqV1Z7x9Kv2Egmh+bqKklt1I4OfrVqRMonL3tgSMBc1kzWkkP8P1rspYMc4zVG7tBJGcdRWsZGE4HJvCHU1TkhMbg4HWtuS0Ic4Heqk6AHDDFaqRzyjYzL1EFwpGSR1pFbZKGAJQjkVYaHduOPoaqRZEhG7viqTM2izJbgkOmcVGJPvKc+1aFu4jgaOVQeeD7VQuY/ImDL0NPcC7pFyGt5YJfmXPANX7W4VSsKxgIKw7JxHdfMCVbrWkhEcjeXxkHk+tTYRoSxoUZOzCuTu4ntL1lcfKTkV02mt5sY3sWPcmqXiO2UTI6c4HX1qk0Kxgzjc2fWp7O7NsAnqeD6VGV3j3puzI+lNhqdK8nmwqCSTjrTtPZo5AE55qnazA2655OMVo6NbtNK2W2MuWH+FYyWhcHqdHBZRalpcqgnz4iSPcU7wbe6hC0kQJeK3OZFJ5UetWPB88DaiIi6qsik5PTcPWrGq2p8IeJbfVdu61vv3U6noCf4vpXNL+U649z0PToo72xS4jTduGSetSro8MwZ4Wa3lHUL3/Cq9nDPp8m+I7Y2AOV+6fpW5GJJlEqABsjPuK4XozpTOV1Xw3bTwuk0IaQjmaMYI/CuNutBmtHYQ3KTRj8GFeuzxK7buntWJqWlwXCkmNQfXFXCo1oLlTPKpbctkEA/zqEWpibOM59K6rVPDLu/mQSFT/dNYxt5bWXbKnTqBXSqlzN0yoIXkQBl4Xk1E9oDKTjBxXQR2ZmiwGAGM59ay3Xy5tjHcR61cZamc42MBkNtdBOoxzWgkfnx4XkjmjV7by3jYfebgirdiBEgkX6c9q1ZUURWiAZDjjpWfd6WLO7eRCfKc9PetmSAvzH165pYlS9s2VzgjPJ9aVx8pkxAwsG6qatTxpLGJYxgDg1TR9lz5MoIGeD2NaZj2R7Vxt60FdDNMX2qTBxhRVWxiRrtwM4Q4x71dnlEW7b1PpUNhHslL/xGhvQlRNW3hy2cc9K04Ywh6c1BZqAMkVeiXe4J6VhLc3iyxFHge5qdVCjGKVAAKMA9OahmqHpjnNTIMDNQrwakLgDAqbABOTinKOKYhyc1IDQNARn2pQlLjPSplGFpAQtGOCBzRs4qXFO2jsKdxFNohxgd/Sql7b+YuDzitN1FQyKD2zTTE1cwo9N2XKyDhCMke9WTb98Voi33KMjmmyQ4GKdw5TGlgJPTiqs1rkdK2XjOelQSwk9Fq07Eygc3NYDDMeKyLqxEr8DI+ldZPbgsc857VTnt8DhcVrGephKmclPZ+UvpWRPF5b5Arsbq18wkYOKwtQtvKk7YNbxZxzjqV7YefgYJNF1b5wOv07VJpcv2e6KNgB+Kuz2jxyNG45FVclRMOWB4mSRQGGPyq0jEqp6Gp5ooijBiTjgEVVRG8vvgdDRclxLMFwILjyk/jP61pT2YvYDGeGxlSax41CbXAJZTnpzXRxxmWFXU8MMilezFY4yaBoJWRhgg0wKAelbmsWDGTfn3rGdCh9apMC3ZOFJBx7VpWkrJKhyQM4JrHiXDA1pxPuxj9ali6nRDT5IUW8sXJBOcjjBr0aeCPxl4fhikhAkVAMnqhrz/AMNamlvKILnDW78MD2967DSdQfTr6Kyt3Qi4OYiejD0NcdRM7aTTNfwhqUsE8/h27cyvZqGjkYffT2+ldvFCtxGpj+THBHvXEaun71dStUMV9b/MyDnjvz6Guu8LapDqtit1bujpLgt6oR1GK5Jq+pvexblsHjAKtubrzwKzroeYCvlbXXgiukFqWZizEoew7VTubO3hjPDY9zmosCkcjcRJtKkYYdRWRf6fBdcDAlX9a6W+tYpdxWRkcDjcRg1jxW0iMXVQW7mtI7l3TOfWze1VkTkeh7VjapZBhb3AcKxlKke2K70Wy3CsrAI+Cc/0rndS0o3EVrEqYkWRmPpitoys9TOcbo5rV4MQxSn+GQKfoadDBtjZPXkGr2s2+/TZcDlSjD86gMbIY2Y8Gum5NtSBW8m3znnpTShiUADaDyafeqIZwDwjkNj0od/NBfHy+9BRTvYEmUFcB15BogLPHiTIAps8wUjb0qN5iYzg4PrTJuU5pkkkwgyfSrlnalAHc8mobS3jg5PJPOTVxJecCgEzQhcDgVfgYKOuDWXFIAPT60oucHIJxUOJfMbQl3NheasAhV96xILwqM9T2FW47tmXL8e1Z8pamaAfLHFKWwaqJcxIud+T6U4TBhnPWlyj5i4rdh1qUcfe61RWdE5yD9KeLkH5uSPWpsUpF8OFHFP3jHJrPFz+NKLrmlYfMi+HB6U/cBVFbgEdad5wHU0rDLLcnpxSbaiSXd34qdWBHNMBAlNeMk4qbGRwaMY4pAUmi5qGVOwHJrRKZqIxcmm2BlPbdciqM0Bye/tW5NESDiqTxYyTVRkDVzDmgUA8fhWDrFmJChVB8vX3rrLhBzxWPqEWUJA6V0RkclWmjipB5N4AxwOCfpXQNMdRHmRj5UQKfWsp4hJdEsBk8VoWnl28/kl2QtwR2NatnLFa2IBZ7Tkrx71FLEEibam454Fbslk0Myx/fRhnNSy6ZDbyhmG6KToff0qedGjgYNtBgBmGT7Vp2kxYeWwGF4A9KebIW7nZkr2FW4bZSN2w57YqXMn2ZTv7MzQ7gpzXPz6eQckYNd8LR2gHnY5HBxWVfaYEYjGc96amDpnE+XsfB6VZjYVcvbHYxIqkFKHGOa0TuYuNmT+c8TqwJ4Oa7Pw7eWWpohmuDHeRH9yD0b2rj0RZQFPBp9os1ndL5YywPy1M4pouDse4+HdVN5iONB5yDZKn94f1qj/Zf9lam88IeIFtyorEK31HrXD6R4ins7sSMrq+MkDq2K7vTfGdlqkRiuEYA8FXHT6GuOUGjpUztNOvY7u0j8q/mimx8ys9SvC82AZmdx6tnNchaahb2tzuE4aL/ZOSK1otdaUK8cC8HGY+o96xcSuYu3dtbM3l3IKbf+WjDABrOvreS1HmB0miP8advrWkLua6iYSvbzp/dY4ZfzqnMxgjJSIBOhAXihKwKRRGJEyO44I71Ulhd7aVOchCqsOoq5EqCbzk+6fvR9vwp8ttNcRu9oFcLyRu5Aqx8xx1/CcopHyMCrf0qlJHuiSLPKHOa3L0nyAcZOcVkzp5cXoW4rpRTRkakRO53HCoMD3rP+0M6AZwB2q3qMionl4yw7+tZatltvQ+laJGcpWFmcn6etIp+QE9u9Gze33ST69qbMUBw6tIeyLVWMbieaozkkmpBMyqG/rUJkOcsioB0QckfWozJuP3TntRYdy4LjdwzMB/s09cqCYw+PV2/pVNZZFGCQR7DFDXkCn94Hz644osFy200vUPgD0FQ/aLgtzOwX0AqtLfqy7Yn/ACqW+WQ8yED60lEXMbv24pjDkn34px1tUADvuPoDxWASw7hvxzSEpjIgGfUGhwQc7OgXXVZcDI/GnDWIt42zSIO+5yRXOxyKflcMB64qwIQRmNlYfypciHzs6Jb+bG4PuU9GWrEeoEAbmOa5+3UqpHNWUuPKI9KzcTSMmdDBfg45q2LvI5Ncys/wA+VPBrQgmZgAcVDiaxmbUF38+2tCOXI61gplZB83ArSgmAAOeKlxNoyNVW4FTpzVGKQMOtXIm+XmoZaH7Oc0FM08U7HoKkZVeHINVJ7fFabcCq0se7iqWgjCuYQvGc1g6sSkTqvXBrrLmDHbmsG/td27IzkYrSMjOUbo46GAibzCM5HANTW0DXN0plwBngVsmwVEzsOe3FRWtmBqAUKcgA/WtnNWOVUrSN+CxEkSgjJHc1MumxvG29N2eh9DWtaWTNCny8sM1bawKRcVz8xu4nMR6VxuK9O1LFahJBsGexBroYbMrukbjaKrrYTpMZkG+Nuq45HvRzEcpnyQiMCViQB+NUprVtQjOxNp6g+tdNcWaFAY/nUjqfWqLWpjO4DDelPmFynI3Fk08WCAMdRjkViXemMp+WPH49a7i+tZZrnzwgUE4YD+dRy6ZHICc4ArWNSxjKFzzt4Zos7o2I9u1TQyyNtCxMWHRm7V20uiJtDS5UHomOtRPpMKj5IgW7KvJq1URHIc2b24kVEuFgLr0cKdxrW0q7EcRScd/vkYNWBoF1LJtitmPsDkj64q5BokaMIp5B5x42Dk//AFqlyQ1FlmCK1KqftuWbnDRkgD2IroNN0qW1KXFvfSJv54bOfwNLpNjc2VuIv3Qh67SR/Oum00xS27MktrAVOMzrncfaueTRaI4L4gp9qNvcgDkuuxvwqzu8zElqdyE/MhPSnx2puNwFrYXuP+eUu3H51GtuIN2LQWo6FTNuH6VA7CyWUc482FjFKvpVJbSeOcSncHHIkQY/Md62LGCBVz5ohfqCrZB9iDVsRW8hA+025dui9DQK5wEkJkjZnO0KM1gXk3BfbweldDIGeMgnGKxri1jyd6lgO1dSN2cteK1xnPHuKrLFHGMspOK6GW1MvyoiIB6mq/2BomLKDuHtmtEzKS1Ml38xcIAq9/U1AYnz8qMfcVpOuJCrLye5XFNeJhyjMv0p8xHKUBYykE+WRTJIZV4aHb7jvWmokx1xTxGdv72Uxk9O+aOYXKY6RkjDA4pn2B2YrHeoM9FcY/Wtg2dxH/qykgPtzUMlgT80kQx9KOYOVmRJpV5ECWSJh/eRgTUAtHX74ZfqK3f7Li6hWT/dqaPS+Dl5M9snijnDkOd+wMvIP5d6FTa21ldT7rkV0n2BouQmaR7NJlwAKXOHIYaWoPIz9RUoh2njBrRFp5bEMm30K9KRrYh8gcHrQ5DUCsIiBx0pfJLL0q8lsMdOKfFbjOMdam5okUo4yoGeKt2mQwzUrWw+6RmgRbG6Gle41oWxyBVuIllA7CqSdOatxSYwKzkaxZp2uVPPSrqMTVK36cVbiJzWRtEtq3Sp1IxVYcipkIIpDHkDHIphQZoLZo5zjpSBENxb+ZnAqm+kk87c1uxIMcirKW5wAAKnmKscsdIyrNs6DPSodN0RDMLho+WAAyK7mCzBDAoCCMVJHpiJjC4FHOS7GdbaeIk5XqPypJLNlUgZxnNbzQbm+VeAKguIwF5FLmMrGDLalkAHTvViJVSIqQMmrEgURcde9VbS5huLhoZH8pQpO8jqewo5g5Sv9lAJK5+lVpbRnPC8etbSwY+9xiozGcZx1p3FYyP7N3cCPJPFZ7Wb2118gBPT15rpn+VSAeR+lZjxhW5JUk9R1qlIlwMq4h2zbDlp2GG77RSQ6dEknzPzj7igkmtRLR2b5IlVQep6n3NXoLJePlH8s/Wm5C5DG+yrbx7ts0gPSFPlDexIq1BFdOg82CzsoiOI448t+JraSFkBEexfqKY9hbSsXnaSVvQE7c/QVPMJxMR5NIgkAFzfyzf8844xt+lX7eX51J09pI/7kv3j+ArRgsZFORHFbxjuF+Yj+lalpLaKgSGCZ37sPlH50uYXKUrYElWh8OwLnq0shiH/ANetKN7kyBP7Esgp6YlZs/yq3bEgl3skA93z+vWrttdajMwEOnWax/8APV2YgD6d6VyXEzW0+5lUrNZ6Zt6gO2zH9aD4esZQp8i1SVeptmJH51vvcWcePtszMT0WCMZNTW9xbyR/6JpwKHo00wX8+KaM2eN3A3OQOD61mzgxkh2UA9607mUBSMjHpWXKE6jdu9DXYdDMy5t4piQH+mRiq8dvJC2FJP41qSosibSF3fkaiFoezYpsViBF8ziWIn3qhfww2G6SKRlB52k1srbyD5Vfn3qhe2puD5dxBk/oaSFYp2TC7XJIJ9KuPEYwCYS4PUr2/Cp7W2jAVBEBj07VdWEDoT7ZpNjUTPit0Y7onKH/AGuKlNk/VufftVsJk4kiVh6irMUaDhV2g1DkVGJli2VMCRDg/wAQGRVuKwQjORjt71pLCE4IypqZLVF+YcVDkyuQzP7NBXpUE2j5yQK3hED0p5t969OaXOHIcq+nbeCOKhfTgBxiuoa0BGCOe9QvYhRwtNTDlObS1CjkUeSueBitaW3HTbioDbYp8wcpRaEE5IpjRZPSrzxgDpTNq/jVJi5SmIhUqKc8VIU5zTlAzRcOUtW2RitGLGKz4jircROahm0S4pp4PFRoQTzUneoKHAgdasou9RxzVUHtU8TnoKTBF2BQRzV+CMAY71Ssz0Ddc1rQRA81ncGTQJ8vSrSxZFMjT04q3Goxg0jO5GkGSSKguLYEHir20ocg1DJ8xyKLiMafT2KEr36gdqgg06NWDbBke1bpQGq82Ex2qbjKMsGecUxlBQAgCrj7WQkkZqjJIO4xTTBIrXA+UhQM1RWAmQFxnmrksgqPdg9KsdiZk3AbcAU6ONgMdBTEI7VIpLcfdpCsWIYlBzIM+1WtjFRswBjgCqsILHk1pQx7V4waQrWIUTkKxySa0YdO2t88oI7KKdBFGflCEEjr6VcEI27efwpEtj4oSgUJEsrE9T91aseRPMpEt0WB4Kr8qr9KlgiwgHRRU/lIcDgp6etVcwZDa2ljaofJiyR9+Xux+tWI47q4DCJbW2gHRpFyfyqTZu5CggdB2FPIjujkp5jDg5HAqkyGeGSxDJbqKpzRAnIBrSkTHNU5T7V1XOixTIzwygj9aVYVI+VicetSsABkimdO1Fx2I3hI56UON67WGfepQ3FNJ5pXCxB5GPp606Pg4Of8amH0pCuO1Fx8pIBxxUiKD7GokODzU6uMgkcVLKSJU3A5H5VZU7gMjFRptI4qRG7VmyyxHGGHBqVEA4NQxghsnNWUTPNSAnk5521BNBxjFXkPGKSRM0hGJLa8kgVSmhxnit+VMVn3MQGc1SY2YcqZzVc4HBrQuE64rPlUg1oiWMJpBwaYWwacGBpiLUbdKsJJzgdapRHmrUZA5J5pMpGhGcAHvVhG3VSViQKnibFQMmYjNTxA+lVt2WHFaVpEHHpSZSZehhUBTWtaocD3rNhyAAe1bFngoKxZMmWQmBTk6806Ffm56d6nES9QDihEXIiaQgE8Ae+KlaLHNQ5w+08ZoBEcmFqjcsCDU88wTdk9Kx7m5HJDZHvU31KSuLNc7VIzzVCWcuSM1DPcAnrVV5+eDVopInklIbbnmhZdvfNUmmyck801ZuetMZqCUBgc1aXnB4rIFwvAJz+NWobvgD0oEbMByK0Y2zgA9BmsO3uM9vwrRtpCexFQ2Jo2rc7z8vWtCEDABHzVjW0hRgfetS2b5t2SR6UXMpI04eAMjj0qdQCck4HpVaNzgfLU4BPOeatGTRMFV/UCpS5CgKcD24qFSBgtyB2qUsGxgAD0oIaPEJT6Zqo655q25BB4qrKfTNdbOixVkGOlMzgYPFOmcA1Umn7UkBOzBeO1R+coOTVOS5Cjk1Sn1AL0NAG19oQDrTHvoozyw/OuVnvbpmO1lQepNUZpB1mvvwU1agQ6h2TatEDksopBr9up++DXENqGlw9HZm9S2aibX7ZR8q/jVeyF7ZI78eJ4F4LAewp6+KbUnkN+Veer4lVcKsJOe+Kim8WpFwVwfpS9g2H1hHqkHiyyLAMfxIq7B4t0xm2+eoPowxXiw8aeWchNx+lTL47B+9bI31Wk8MxfWYnuUOs2k7DY4OferYuInHDgmvBY/HVtnEtqV91JWtG38dRKA1pdXCkfwucj86h4WRSxEGeyy8oazJ24INcVpnxLhZxDeOyg8B+orpl1OG9h3xSK4PQg9azlTlHc1jNS2ZHMepzWfMcZq1K+1uTVK4cE8GnEorycU1HBOKZKSTSK2KskuRtgjmrSEHms4NkirMb8AVIzQR+QKtxAN9aoQtyKvQ9jUyKRbij+YE1ow7uFAzVKEFmGK1baPGOc1DKehdtYvlyc7q07VSuARn0qrbKDxnFalvGQPrWTM2yzbpk4NW41ydvcUy3iyvNWFjPQZoMmyu4AJyKo3Kg5atG4QoCetZ07BQc8g0MqJiahJwR61hzybQea1dUYljt7VgXLnnvSSNURSNnvVOeTZ3zRNPt4zVCWVnOATz2rWKHcke67CmpcMTjmqNxdQWa7riZIwPU81z938R9Hs3Mca3MzDui8VrGk5bIznVjHdnbxOxYbq0bYYOScCvJZPirIv+o0uQnt5j1Vk+KWuO37u2tIvQnJxV/VJsyeMgj3m12sM5FbFsFZfvBcfrXzUPiX4tLqsd7CCxwAsYGa3tE1vxnreoLYz6qISSACD1J6AAdaTwUu5m8ZE+iIxGcfOpx6VpW4iH/LZc+/FeSS+D9dihWWbxZJBMTtaJXG6M+4rgtU8R+NfDurTaZc6pcGWPLI8g+WRfUVKwt9LkrFwlsfUscijjev4GrAmUAcivlvT/jL4msHC3HkTLjow5rq9I+OxmIS9syGzjKN2olh5opST6nvXm+jAGpVlJ+82a8y0r4m6bec+f5fosnBrp7HxRBc4KyKR7Vg9NzX2UrXR52c4zVebocVa25qKWLcvSuk0SMa8faM1h3d8VJxniujubUvkVkzaSzHJFNA0c9dX8uMnpWLd6pMuTnFdRe6Jv5JbHoK5+/0gIrFQRW9OzZhVbSOduNSumz+9YD2qi88r5y7H6mtv+wJWO5gQvrUcumLH8oXNdKaRwyUmzJgLSPtB/OtnTNPkuyxC/uU5Z+wqOPSCpyAQa2bS5C2psj+7kY4IHQijmQuWSKLWeUmljXKxD73YVzMrF5CTXodxYs+mSwxthWGWHrivPpkMcrKxHB65qkZ69RuOKYWKninM64wCM1Cc7vWqQmW7aN7y5hto03tK4TGcdTXYfEDwroXhTUdIGiXz3P2yEm5QkFYpAQCF9q4pJCmCMqfUVYsIZL2/gjBZyXzyc0mLU2rvTtrYK4Jpmn63e6LLhJGaMHlGPFdRrdolrHEMDhB9c4rjrxAXapaTRcJtPQ9B0vxDHq1uHVvnxyKsvOTxXmGnX8umXqSxuQpYBh2xXo0D+fGJByG5zXHUpKLuj0aFRyVmTB9x5pR1pnQ09OelZG5JFyatquBVaPkelWkHApMaJ4SQRWlbndgCs6MD0rRtPlIPepaLRpW6FMGtW1PPNZ0LZUCr9qRkYGazkO5tWShmAxWzbxdKy7FcgEVv2ahgM/WsjKbJ4UDDaB+NO2FH68VLGi5zzkU50+UmqSMblSc5UlRuI7Vk3acdCua1njxlgTVC8GV5FQy4s5XUzjdiubumbnFdZqkJ25ArBFk1zNtAySapG6Oekj+R5WIVUGWZuABXF6v4wEsj22mAhRwZz1P0q38TdflW+bQLEkRQ/69x/G/p9BXDwlomGUOK7aNJWuzlrVZbRL9wsjxyTSu0jEdWOa5VlHmscd67KOaG5hZCcEgjFcldwNaXDIw78H1ruhZaHn1LvciY4qItlqkbkcdaZsJrQxsW7WPy5oZ32MsbB9hON2O1d3H8SLjV9V0KSHSorG50tsobdctNk9PYYrz+MkYBPFd/wDCfQJdX8Qw3zfJZWRLyOeh9gaiewWPcH0G2ttRFxFbyQSav8xnuW3GF+pX05rl/itodn9hibVJil1bAiGQNkvz0HrXQ+JfHNrcWbW1kouHJGSeikd81xM1vLrt2LnUX891+6pJ2p9BXBezudFHDylq9Dy+LR7jULhVP7oMcKW4zVqfwnqNhKVktZScZUqM7vpXrsHhi0uE+e3Rx19K3bfw2t1CkU0ku1fuEHJWtPbNnU6Vtjxnw+ZHbypEl3KdpVlIINd/ownjICzjcv8AATzXoaeC7GWKIXNkXlxnz+h/TpV+PwhbW20KuVA6kZP51jVjz6m9LEOOjOEdNg5wPc1FJLbIpMt3AoHcuK4WJtP8vcs1259JZCTVb7PZtIzvEsn+8TW3sDH6z2Oyl1zRYchr+Jm9F5qnJ4h05iRGJZPohrmj9nTBjRFx6Cpl1OJAAcCj2KD6w2as18LgYjhZQe5qqbRbjkxfN6moLXU2upPLtYJZ3PRY1zW/Y6PrN180lpHaoOrTOB+lNRsS6lzGOiLNw4yPSnDwjZy4Lw7h9TXT29jDbqftNykjeka8fmaZdXdnChO/Z79aOaxOrMRPClmuNsYz9c0//hF7Xq0aE/Snya7ZQEsZJ5PdI+Kp3PjnT4TjyLs/RQP507sVi4ND2A+TBGeMEHpWdJ4StJnLTaLasT1byxTP+E506bjyroH0LCmXfjaC3h8yGG4lx1USCqVyWkFx4H0wJltCt3X/AGVIP86zJ/BWhqf3miSxD1DsBUZ+LNqknzabeqw4/wBcKlHxb05uHg1CL1+dWFP3haFGbwP4ePRNQhz/AHZMgfmKt6J4Z0jRpmniu5pnPA81RxV63+JmjT/KLq6Unj5oMitFNa066Abz7WQN/eTaaOaXUORGHquk3upuWt762K9gwINYcvg/VACzIsg/vI2a75YtNmOdkZHqjVKLRAP3E5i9M9DS52h8iXQ8sm8PXCMA6tXYaKXSxSKT+HgV0ZsJ5lIdYJSB1A5NUJbN4WOYTH+HFROV0aU2kyAr3p6jA4pwU4GaUoRxWLR1KVyS3Aq2q1Vi4OKuRg96llxJYl5xitCBMYqlEDnNX4m4FI0RegY9Aa1bGPJ9jWRCRkYra089KxkNG5p5KMBjINdDZgYrEs1AUHvWxbNjHWpsY1C8ZBHtVQSScVLJymOMgc0yE7wT6UMdvB70zErsob6VRmGZNjD5fWr7rnmq0g65HPrUtDRgalBjeozWRZp5V4obgZzmukuoiSSec1i3lv5R8zpjn0pGqeh5r4i8MLJfXNxsBaVyxb15rnZfD6KPujP0r0HX9RtlOTIqD0J5rn4lub4/6JYTSr/ff5V/WuulzW1MZySOTOhtvykZJ9AKgu/B0t/nzYdn+2WAxXe2/hm8lO+91KC0X+5GMmte28PaRCAZI729P95gQproUrdTnk76WPHP+FbMRxrEKf7IQsf0rRtvhRC6DzNbuXYjkRW2APzNev8AmaPYAbLGwhx3uJRn8qY3jbQ7PKyXunRt6RIWx+OKv2pl7PyPOLT4OaW+DLc6rKe4+VRXX6V4MgsLdbW3F4lsP4d2Mn14FXm+JWiKxxfyMP8AZt80q/E/R8Y8+9c+ggx/WpcubcqMGug5PCFs74Md7j/fx/StIaDbRKI1gmUDuOtR2njywvCBFFeLn+JkwP0restTjuX+QEgdcjrWL5epsnMo2unQ27giObHcZzmtiC7SLjyCFq/BLbuRutTz6NjNW0treQ4/s+5A9VkU/wA6Vo9xOcuxHbeIoQmyRc46ZPSrcWsQNknBB96gNjprE72uovrBnFINE0+Rv3OpQKT2lUrVqN9LmblbofOmleFvEWuXX2PS7Bbm6KltolVRgdeSaz8TxSS29zGYp4JGikTIO1gcEZHWtPw54mvPDWqjUrUK0oRkwSQCDWRd3RaWa6mIDyuZHI4BYnJrpuTyMkfG3JIA9a2vDeh2144nu7N5oexYlVz9O9P8M+GP7ThXUNQjKRZzFCT97/aNdgsSouFGAOijoKynVtojanSb1Y9HjtIvKtYoreMcbY0Aqjcyu2csfzqyarypkk4rByN1TKLlug4qpKAD8wGK0XTI6VQniJbjn2pXuXyFZ7eKT+AVXk0WGXnaKtnimGWRehxQnYfLfcyJ/DcbA7UArMl8OSJnapPt611JusdetIb8dCBVqoxexTOKPhqSUlXtwR6Yp9v4PkdvmsFVfXArrWvh/dxR9vxxT9rIn6vEwofCax8mJEHsKuQ6FaxdVx3NW2umY/e49Ka8xbjNJzb6jVJIabaKMfIuBThK6jCsfzpBluBzUqWzZ5pKQcpLb3s0TDnP6VtWWvRAbb63SWPoSeo/GsXycc0YLDHWlcTpp7nXwaHpWugf2dcpHJ3SXv8AQ1RvfBuoQzi2FsyysQEc/cP41hQFoHDRkqR6V2/hLxwI547DXN09g5Cl/wCKHP8AED6VSd9GYypygrxOUvNIu9IuTbX9u0Eo9eQfoe9MUc46V7B410aObw3BaNfWt1p87ZsdQbgwuegLe9eLSXD2tw0M4yVYruXocHFOpTaHQxHNozQjyDU6S4PFVo3V1BV1Oe2akRgrgEjP1rKzO1NGtByAa2tOOccVgQzog+ZlH41rWN3ERxNF9NwzWTRV0dVatjFa9uQW5OK5yxvYmwDNHkdtwrespo3I2yRn6OKVjGRrowCcCpAQy5qKJg3G5AP94c1IqEg5Kr9WpGJXZcEnkmo2jZxnpSahqVjpcBlu7yGJQM8sM/lXnniH4hyalvt9NZorTuy8O/1PYUKLYXN/X/E9hpSMEeOWRfvMT8i/4muEudW1fxI5NmXjh/5+JBgAf7Iqnplg3iG/8+5ffBGcJCOjGu9tdECxr542IOkScCtlFRRN29jkrHw1AJDKLd764HLTyn5Qfepr+6i09MzyPdOOkUA2ov412UsHlwGJFCx9MCuY1jShMpwKTqFRhfc5mTxNKSRBDDbD1Ubm/M1Um1Oe84luJnHoXOKZqOmvbsRtP5VQCsvtVJ3NuSJbFnbTcSRBwetPXw/p8o+7sH51BDIR1q5CzDGTSbY1BD7fwlp5YEHJ9xW3a+GrSPBGM/SqMEzDGDV+G4YMMkis3UZSpo2rDSYIsEBBW5brDGeCufaubt5WznJrVtW3HOeaw9o2wlSsdDDNGP4auLOWIBY4rHtiDxWpAuCAapSZzSjY0Iy23AJqUIr8OqsPcZqvDktn+GrK57VaZDR8nde1aPhnQxr2pF5gTZ23Lf7T9hUen2Dajdx2sSlnlPAFd3oWjJoWmrafxlmdz3yTXoTnZEwjd2LwQKAFGFUYAHYUxwTUhbsKY1crZ2EfSkdcin8dTR97tgUrjSKjp1NVZYCcmtTywe1NMG70IpNlGE8Bz0qpNE2a35rbngVXazDc4oUgOekibuKhMbA9M1uy2eO1QtZgnpVXCxjlDUbIc4wa2WtMdqgNrk9KdwMxUOe9Trbb8d6vC1A5IqRY8DgUCsQQwKg6c1MMAUuMdRSHmhBYaTmmAYJp+KTAoRLEFO6ikxkUD0osB0/hvxS9lp1zomoRi60i8QxywSHIX/aX0IrzbU7mbQ7+ayE/2q3jY+TIRgsnbPvXTbsGue8U2J8v7SoyAPmNb05X0Zy1aaT5kYtzqJlfdG7ofY4qSC7myC0rt9TWSWwc1paVbT35PlRMyjv2rZpGSbeiNH+0ZFHLNj60sOoRg52H65q3FoFwy/PGB/wKpY/DMzH5VBJ7ZrO8TVKRLaarASCYAxHfPWtmz8QwRcC1K/8AAjVW08E30gBQRDPQb62bL4d6tOwB+zrnpukqGole8i7a+JIFAcJhvXPSq1xfw3UrF7m4jVu6Ocg1r2vwr1dsZkslz/tn/Cs7xB4G8SaGBOLGO6tl++0D5Kj1xUcsRczOXa3maYs8ryYPDOxOR+NWpLxLa2LMAF6E+tDocZ6Vp+DPDv8Awk3ieGKdSdPsQLibPR2/hWqA7rwP4cS00uG9mQrLKoYIw6ZFdDNCSDjkr1q+VXACjAHQCo9mA2O9csm2y1oZZXzBjAOKzbu26jHFb0kKxgsOp61nTruzxUNGkWcvfaWk6H5cnGOlc/daBuyAMV3jxYBwKqSWysCSooTsaJnn8mhTJ905HrSx6bOpwQa7n7AroTioTZKrZ280+Ydzl4rOXoRir0Fq46itxrJG5C4NOW0XoBSbKTKMEDZyQc1qwRFQDT4LfB5HFW0jHpWVtQlIltAc81qISQKz4AQRgVpQLkimjCaL0HoauRKaqwqBjnmrkYY8+/WrMWfMfhS5MOqRyr99cqp+vFd9cDY5BJJ968/0IhNWhQAcS7cfjXf3hIupIz/CxFdtTYdH4iOimbiM5FG4HoMVkdQmTuxjin4pM80ucVIkO5200LtJIpQ2etBNQUhCM0hjx2p/akLZoHYpyw5PSoWiAq82KjdcjFFxWKDxiojEAelXJEOcVEyCrCxUZaYRjpirDr6VARjmqERPyeaYxAPFSsM1E4xTQhpOBTaWmgZNMQ4mgU3dik34GaYh7HFVtViF3pNwg42Dd9RUdzeCJSSagsb9b5p7fPWI1UVqZVGrWOLii33CR+rYr0Cwt0srVIowBgckdzXBWx/4maKDzvxXoETDyxzyRW1V6GFBakyt681ds8kgjvVKBC781rWcBzxXOztSNmwcIAOa63SJA4UHn0rlLOIr1re0x382OM+uaz6hJXR3Vmx2cgfSnT4xz93uOxplmTJCGIA+lMvLpYU+fGPerasjl6niniWxjs9ZvIk+4spIHoOuK9A+HelpZ+HVufLCS3rmRvXA4FcB4ud5vEl3Cg3SyMAqjuSBXrGiR/YdH060cYeOBQwPY0pP3QZdxg4pWHHFAYM1BPOKxGVbheKz5E55rUnxg+tZ83HNJlxKcoG2qxjzVqQb81CePpUmqGhAFxUZiHpUop2KBlbbgHAojizzirCrlqVxtBCgUmUiJBtbJq0qcCo4045FTxrk47VLETxLt5q7brnBqtGO1W4B0pxM5FtOCMCrkJweufaqydsVZh6fLwapmLPl60k+y6z0wRMOP+BV6DqoMepzqe7Bh9CM153rimy11nQ4GVl/XmvRtaw97HcLjbNBG4/KuybuiqfuzsVfYnNID3pAffikdvSszpHcnpTt3GKi3kjpilBz1pCHbielSLyKgNSqcioaLQ/d2oApF460u7FAxhGDzTTUnBpGGBQBAyZOTUEiirLDioZB7ZpiZVZe9V5Bg1afiqkjg9KtIRC7YOKjPIp7pk5BqN8gYpksYetNZvSkd9tVnn5PNNIhskklxVeW4+WmSyZHWqU0mRirSIcjL17U3SPbG2GJxTvBpkN7dSMxZVt2JJ7GsTXJw90QOAtbfhVmi0DW789FRYlPuTXQo2RxynqY+nOX1teeDJz9K9Ghj+QY/A1514aTztXBPQcmvRoJMoAKmqa4YuQKMjnmt7TkxjNYtmBkZro9Lj3da5JM70jWt7VXXOKtwn7LKpOevapLKIED0q8bUZ3AcipRDZ0OmTZiy3AI4965P4s301h4YleB2SQSLyOMDNdH4dfzZvs7vtZTuXPRh3FYfxR02XU/C97HCu6SMFtvritkrxOVu0jym61GRvHOnTk7RK0TnJ9cV6/qN9s1fygxH7lHH4ivnnWLxyun3G4hxCAG91avZ9XvT/aOl3A6T2MbZ9eKdSHupkQleodXb3W4cmrIcEE5rnrS5JQHvV+C7ByrHnHeufQ6HEs3EjMjbThj0qtK4IA/OmSXHGCaqSTnGAaljjEkZwp4zUR796i8w96N2amxrYkBp2CcYqENg81OCMZosA4rjmm55pc5U806JQ55pMZJCm4H+dSJHzkGjbtXb0BqW3XIxjipYmySPpirMRzioggB61YhTGDTSMmXLfrz0q2ilW3AHFVowCBirMTHOAc/WmYtHzP4stf9IiuByrjYa6yGb7b4R0i96Oim3ceuDxWTq9qLmyZT/D8wqz4Cla+0HVdKYbpLci6hGeSB96ux6xKqLllzEytkVHc3MdpC00zbUXqSaeRhvbrVTVrFNUsntHZlV+4qEjq6aElhqUOoR74X3LVwNk4rK0fTRpduIQ27HGa0lIpMEmPPWpF4FRbsVIjVLLRIKDjtTQ2TS54pWATJpTyKbnpQTkUgY081FIcdKlzgVFMQBmmhFOVs9apSZU4q1LwapzuAetaIRC8uBUMlxUc0oyRVKe42jrVEtkktwcmqbzbm61Vmu842tkntTI5N596tIybLvmqTt3c1VvG8uFzUIgf7UJN7BfSq3iK88i2CA4LVa3M57HJ6hMzFmJ5JzzXY3ZOifDa0gcbZ75zcP9Oi1yuj6bJr2t21ioyJHAb2Xua3fiRqiXN7DYW3EcACKo7KBgV0eRwsj8IJjzrg9B8ortdPkLMBXK6FEILGKIcHqfc112kwnIyKwqu7O7DqyNu1i5FdHpiZIBHFY1qm0rkV0OnYBU1ySO1bHSafEGUfSteK2Uqd2aydNBLg54roYE8xcdAalMxqbmVNA1tKHG4+hHan3Mp1C2e3mHEgKt7itqWzEikRxsV9etYd1G9tLgn6VcZGWjPnbxfYf2efsgVkFtPJEoPUL1FeopdC88PeE9R/ge2eBiezA/8A1jXP/FXS2lupbyNQUkRXP1HBqz4MmOq/C+aKMlp9GvROV7+Wev8AOuq/NA5GuWpc7a2QhA6k4p0svljn8Kl0h45rKOVeVcZFRanCzKSMiuJxO+LK73hI65pjXPc1j3V20Ax6dqiTUFkTOce1RY1SNk3APINSx3JDAEZU1jLc54Bqwlx8vJosFjRM/wAxxyBTvtOSME5PaqdvMr9OKnIUc0gRoRMTyamXglgKoxTnGGBFXYZMYzjkUNAydZN2ATircTIQApGapptzgDINShAvzKcEdvWpIauXiApHHNWYR8uT+VVoWLjJq5AOKpGTJ0BABFWoAXO44GB2qCMAVZiJXhT+NIzZ4MAHBU9DxWT4evT4b8W2tw52xO5hlB6GNq1I2zzWbr1oZ4xOigMhya7IvobVoXR0muWI0+9lhU5RTujP95DyKzVbIrYtbseJfClrdKS99pymOUActH6ke1YuNpz2PSpe4Yed42fQkHApc4GR1pobIoLYpM6B24kc09WwKjOGGRS9uaQycNQXqFW4p4wKmwEhYg0m7JzUYbPSikArtzxUEzcdaeSMc1XlYEdaYitKwX6VRnYdRVm4cnNZtw2K0SIKt04POcGsy4lPNW7hgc5rMuGIB960jExkyDILE1PANzDFUmkxmtLTF8wCrsQmXY7fIyw4rjvEVx9pvzEPux8Cu31GVbGweVvTj61xvh7RZ/E2uCInbFnzJ5OyIOpqoLUiq9Dd8JWUWg6Pca7dfI06mK3z1x3IrjIt+pahJeSAlWY7c+lanjjxD9u1L+z7A4sLbEMKr02jv+NN0y2d1jVRz3rS/U5Yxuzf0e3LleK7LToNoB/KsvRdP2IuR2roIECkDPFc82ehTjoaVsucZ4rbsVBIxWPbx9wc1sWGVIzxXOzpWx0umjaoz6V0Np2Nc7YyqcADmuhsjwKi5jUN+wQOw/nWZ4m0kEF1GWI3AjtWpp3LA/hWhfWwuLctjoKuMbx0OOU+WR4nrmnx6laXFvLyyjgelcn8HpI7LxTqPh272/Z9RgeE57sOn6V6D4qgOnagZlU+W4wRXkPiuWfw5rtprVl8rLIHVh6g9K3oy6F14XjzHpvhtm0+5udHuGxJbuVCn0Hetm4wyEYyK5+/v4tQXTfGtjkxXQVLlB/A3TmumkQTQh16MM1E42ZVKSlFM4PXU2lyOo6Vhidhjmug8SqUbpkZNcu0g3VlY647GlDclTkmtCG5Djr1rAWX3q7azEd6LFG7DKFIArRjcNHnOD/KsGGfDDNaMM2BkGpsBejY7uefer8TcdazI5RJVyKQjFSwaNCI/hVuPpggGqKOMVYjfkc1Jk0aMACrgVcgY4IP4VRiyCG/hq7C+UyKaMWW0fkA1NG4DZz7VWRlPIz+NTJhuc0iTwdTjp3pWwylW5B4qNG4xRmuo62J4Q15fCfipIrlD9ln+SQE/KVPrXU+N/C0nh++jktv3unXaebbyjkAHkr9RXFavp66lbgE4dehNdT8OfiBZ/YG8F+MZC1lIdltcP8AeiPbn2qtGclROD5omOGIGD1pMndW94p8J3nhq5/eMJrOTmC7X7si+/oawOhxzUNWOmnVU1dEoOBTS/NRk7e9AbJpGhIr4NP35FQFqXdxRYVyZXxSl6h7UbgBiiwXFkfAqpLLjvU0j8YqjOTTSBkE82Aaz5ZCanuiQKoyMcVcTNsq3D84rPn4Byc1cmPPNUp1PNaoyZnzyBAfWt/Q1CxK7c5Fc7dJwa6Pwzbz6jYxi2Tcw43HotUyE9SHxAbjVbyHTLNDI/G7HQZpPE+pWvgvQToemlGvrgYupl649K0dT1C38MQyw2WJtQkH7yc9F9hXnslnNqF01xcMXdzkk1UVbcwqPmehBpdtJc/vJF5JrttEscbSRms/S9NK7SV6V1+l26RgZFKci6ULGpax+WAABzVtB8wycDvUSkDpUgbOK5mztirGnbyKGAGSPete2k4FYFvxg5rXtJcYrGRojpNOfkZNdRZvlQQciuPsZOQc9a6XTpflAzWZNRaHYWAwFfnb0/GtjI2FPaubsbhlAONyrzitlLjzl4LDjn2ropSsebVi7nMeKdGW8t5FwCcHBrxvxToov7KbTZ1CyYJic9m7V9A3MSuCqkMpGM1wni/w4JEaREzIvII70J8r0N6crrlZ5j8GLxbpNS8C6sdnmZaPd1Deo+ld9oJu7M3WjaipW7sSAM/8tIz0Ye1eV+I7C80/VodZ08GK/tDuOP4wDXs3hnU7T4l6HaalayR2+tWqbGBPX1Rvb0NbytNXRhZ0ZeRxPjNRG4wfvHpXE5bzD6V2vjwul+sEkZjliyZEPVW9K5BU35OKwtbc74STjdDckVLbyEN1qMjmlUZosaJmzbyoeWGauRShThScHt6Vj20mwcn2rRg45P51DQ0adq5Dlq0I5cc1mQOAtWY3OevSs2izXgfI5NXYucZFZME20VqQZwCaVjGRp25Pc5q3GapW/AzVqOQYxihHPItK1SB8VXQ/L70/caLEnhQfnGaduxUG4j607ccZNdB1EoOOtUdR0qG/jLAATDkH3q0H4o3d6pOwON0XPB/xOvPC0TaF4kibUtHc4xJ8zRD1BrrL3whZ6xbtqXhPUE1C1YZNvn95GTziuBubeC7QpMit745FZsCax4culvdFvJIWU5IQ4z9R3pvU5Z0nH3onRXFtNbSmOdGjcHBVxgj86btOKtWfxjTUYha+LNFiuSvAniXDflWjD/wh2stu0/XGs3YZ8mUdPbmp5GOGIe0kYgweKDkVvDwlcXDH7FfWV2v+y+01VuPDWr25w1i747xkN/KlY1VaLMoEdc0VPJY3Vu2yS0nT/ejIqN0KY3KV+oxTK54sgkHfNVJjnjFXJnReAVJ9M1VlhY9T74oSHzozrhc1RlFa8kJZeEY/QVWbSr+4/wBVp9y3uENWjKU0YUnLGmJZ3F4dsMDN71szaBexuFuBDbE9pXCn8qq3OsLpDi0i2zkfedDxWiMpTXQfbeEIki+06rdLGg5Mad/xqa68RQpCum6NCLaH7rOvWsC81G61AbHJSL+6D1qvbTfZrlP7meatIx1bNLU9PhCgj5m7k9TVC1st7fd4ramQTKGByKLWIRtkCpcjaMB9ta+WBkCtGE7SKhzxmlEuBWcnc2jEvGYgYB5qWKfOM1ltPjvUtvcc4zUM1NqKc5ArRguCCKw4pMkYNaVtIGNYyRonY6bT5ycZNdNp9wFAFcbYyfMK6SxlCgHrWTvcJao7GyugFANaK3fmLsLHb6VzVrNkA1oRyngg4xVJnLKBuxzALtWnXlnHc25BILY6VmRXHr1qdbrtnirUkZOGuh5/4u8MFmM8SgEda5nRbK88PXD6xoXEinM9v0WXHUe1er6pGtzGwOMGuTtrYWF1JIOEGWIpwm0aW548rLVvq/hP4uaegun+w61ASgcD50PuP4lrivEXgnVvCshN5AZ7QnCXkK7oyPfHT8axrjS1vLmW7hBt5i7Mjw/KVyfatjRviT4p8LAW10sd9ak4JZM7v94V0Jqe5zOnOjrE52VFbDIQyt0I6UxUzyDXZz+IvAfiWbdqGmTaRcOfmltGIXPqV6fpT0+Hun6gQNF8WadcA8rHN8rY/A/0pOn2NY4tbSVjj48LweRWlAcqCemK1J/hj4ohc+XBaXSjvFOOfzqP/hFvEFofLn0i5HsAGx+VQ4M3jXg9mJb5wCelWoDubBpkWnanHlZdMvVA6nyTxVmPT7zk/Yroen7o1m4s09rHuWoFwpH8J7VeglKY71Fa6fqDKN1hcAHoSvWtC20e8k/5ZY+rAYqeRkOrDuTRTZGc1ajYFc1GNNkhH72SNR9aq3Gr6Vp27zr+BSvVS4z+VHIzGVSL2NSOTgUT3cUC5dvwFcbqnxH060GyBJbhz0CjaP1rKjh8YeMn2WsI0+2Y8yvkAD61XJ1ZDmcoRk1J2xUfWl6VaO4XoaTmkJpN3pQMXoaeCcUwHilVsnaKACa1t7pcSxKx9cc1nT+GrSRtyuyt254rVC4704dcU7szcE9zCXSNSs+LS7dP9xyM1Zg1bxrpp/0e7uXXr94H+da+A3Ap6ZHBOKpSM3RiZ/8AwsnxnEdlxF5i9w0GanT4q6rCp8zS7Ynvvjar6A+tOaMN94A/hT5l2M3QMx/i1K3J0izD+uzFV5vinczYK6XagjoAprbMMeMiOP8ABRTfKTrsT8VFHOuwvYeZgf8AC0NZb/V2Nuo9oiarS+N/E1zlkuHTPOFj6VvXa4BwAB6AYrJnUnIFPnXYXsTnbqTUtSn869Z5XPVmagWQUZxWtJFgVA8ZqlMr2SMxrYDpVee2wDjrWo6YqtNlu1VzAoJBYXfSJ2wQMVopgHg1ilcdBz61J9ulgUY5x61LRojbwwXIqndXsMCnfKoPpmsi81u5eLy0UL71hSxSzSFpHdvqaXK+o3Kx1MWpxStgSCtG3m3Ywc1xUFuEYNjmtyxlkQg5yPehxBSOutXyBmtK3YgjFYem3Cygc4I7VsQ5rCRqjdsJdrDJrpLORcA5rioZ9smN1dBp0krqMdKxkVudZb3W3pV1b1UXJrmzfxwLjdvb0Fc9rcmvamXjt7loYs8BBg/nSRNj0RdWUOB0q3HqKP0avHLLSPEdvKHa+JB7MSTXY6Vc3oVUnwSByw70PQJQVjuGuldOoNYGvXCw2zoo/eSccdqaL5lQepqpcRNK/mOTk+tNMiMbGPb6ftTkVDd2oUdAa3BEAu7GRVK6jzyKdy3qchqOkRygsAQ3tWFJpE8b7o5pFPrmu5uoPlzWXPEOeBW0arMZUIvUwra61+zYNb3tyhHTZKR/WtaPxj4yixnULh8f3mpgjIOasQ9qr2zJ+rRLEXxB8ZRKB57uO37tT/Spx8QfGzHhm59IBSWxweuM1pQSucLmk6zH9XiZ58VePbrnzZhn+7GopwXxzqGFe9liB/2wp/SuitSV78VeVd3INT7di+rxRya+BtZum332rYJ65dnNaln8NtMQh7q6nmPsAoNdFEeMGrgT5Bz1qJVZMfskitpnh7R9OYPbWERf+/INx/WtwuSoBPA7CqcZwAPSpw1RdvcXL2P/2Q==" alt="이수" onerror="this.src='https://placehold.co/300x300/4f46e5/ffffff?text=ISU'" class="w-full h-full object-cover" />
+        <div class="absolute inset-0 bg-rose-900/25"></div>
+      </button>
+      <div id="raid-float-zone" class="relative w-full h-0"></div>
+      <div class="w-full grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="bg-black/30 rounded-xl p-3 space-y-1.5">
+          <div class="font-black text-sm">⚔️ 내 공격력</div>
+          <div>🖱️ 클릭당 <b id="raid-click-dmg">0</b></div>
+          <div id="raid-attackers" class="space-y-1 text-[11px]"></div>
+          <div class="pt-1 border-t border-white/10">초당 합계 <b id="raid-pps-dmg">0</b></div>
+          <div>내가 입힌 피해 <b id="raid-my-dmg">0</b></div>
+        </div>
+        <div class="bg-black/30 rounded-xl p-3 space-y-1.5">
+          <div class="font-black text-sm">🏆 피해량 순위</div>
+          <div id="raid-ranking" class="space-y-1 text-[11px]"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
